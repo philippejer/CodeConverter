@@ -211,7 +211,7 @@ CS0246: The type or namespace name 'MissingType' could not be found (are you mis
         Return tS
     End Function
 End Class",
-            @"using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
+            @"using static Microsoft.VisualBasic.Conversion; // Install-Package Microsoft.VisualBasic
 
 public partial class EnumAndValTest
 {
@@ -245,7 +245,7 @@ public partial class EnumAndValTest
 
             default:
                 {
-                    Ratio = (float)Conversion.Val(pS);
+                    Ratio = (float)Val(pS);
                     break;
                 }
         }

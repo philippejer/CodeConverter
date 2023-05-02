@@ -1698,13 +1698,13 @@ internal partial class TestClass : TestClassBase
     Public Function TestMethod() As String
          Return vbCrLf
     End Function
-End Class", @"using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
+End Class", @"using static Microsoft.VisualBasic.Constants; // Install-Package Microsoft.VisualBasic
 
 internal partial class TestClass
 {
     public string TestMethod()
     {
-        return Constants.vbCrLf;
+        return vbCrLf;
     }
 }");
     }
@@ -2221,13 +2221,13 @@ public partial class Foo
         Dim x = DateAdd(""m"", 5, Now)
     End Sub
 End Class", @"using System;
-using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
+using static Microsoft.VisualBasic.DateAndTime; // Install-Package Microsoft.VisualBasic
 
 public partial class Class1
 {
     public void Foo()
     {
-        var x = DateAndTime.DateAdd(""m"", 5d, DateTime.Now);
+        var x = DateAdd(""m"", 5d, DateTime.Now);
     }
 }");
     }

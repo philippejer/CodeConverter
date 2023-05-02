@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis.Classification;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -7,6 +8,7 @@ using SyntaxFactory = Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using CSSyntaxKind = Microsoft.CodeAnalysis.CSharp.SyntaxKind;
 using Microsoft.CodeAnalysis.VisualBasic;
 using ICSharpCode.CodeConverter.Util.FromRoslyn;
+using System.Xml.Linq;
 
 namespace ICSharpCode.CodeConverter.CSharp;
 
@@ -94,11 +96,22 @@ internal class DeclarationNodeVisitor : VBasic.VisualBasicSyntaxVisitor<Task<CSh
         var convertedMembers = string.IsNullOrEmpty(options.RootNamespace)
             ? sourceAndConverted.Select(sd => sd.Converted)
             : PrependRootNamespace(sourceAndConverted, SyntaxFactory.IdentifierName(options.RootNamespace));
-            
+
+        var extraStaticUsingDirectives = new HashSet<string>(
+            convertedMembers
+                .SelectMany(m => m.DescendantNodes())
+                .OfType<MemberAccessExpressionSyntax>()
+                .SelectMany(m => m.GetAnnotations(AnnotationConstants.ExtraStaticUsingAnnotation))
+                .Select(a => a.Data)
+                .Where(m => !Regex.IsMatch(m, @"[.]MyProject$"))
+                .Where(m => !Regex.IsMatch(m, @"[.]MergedMsVbNamespace"))
+                .Where(m => !Regex.IsMatch(m, @"[.]My[.]Resources[.]")));
+
         var usings = await importsClauses
             .SelectAsync(async c => await c.AcceptAsync<UsingDirectiveSyntax>(TriviaConvertingDeclarationVisitor));
         var usingDirectiveSyntax = usings
             .Concat(_extraUsingDirectives.Select(u => SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(u))))
+            .Concat(extraStaticUsingDirectives.Select(u => SyntaxFactory.UsingDirective(SyntaxFactory.Token(CSSyntaxKind.StaticKeyword), null, SyntaxFactory.ParseName(u))))
             .OrderByDescending(IsSystemUsing).ThenBy(u => u.Name.ToString().Replace("global::", "")).ThenByDescending(HasSourceMapAnnotations)
             .GroupBy(u => (Name: u.Name.ToString(), Alias: u.Alias))
             .Select(g => g.First())

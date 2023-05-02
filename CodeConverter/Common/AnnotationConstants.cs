@@ -12,6 +12,7 @@ internal static class AnnotationConstants
     public const string SourceEndLineAnnotationKind = "CodeConverter.SourceEndLine";
     public const string LeadingTriviaAlreadyMappedAnnotation = nameof(CodeConverter) + "." + nameof(LeadingTriviaAlreadyMappedAnnotation);
     public const string TrailingTriviaAlreadyMappedAnnotation = nameof(CodeConverter) + "." + nameof(TrailingTriviaAlreadyMappedAnnotation);
+    public const string ExtraStaticUsingAnnotation = nameof(CodeConverter) + "." + nameof(ExtraStaticUsingAnnotation);
 
     private static string AsString(LinePosition position)
     {
@@ -39,5 +40,10 @@ internal static class AnnotationConstants
     public static SyntaxAnnotation SourceEndLine(FileLinePositionSpan origLinespan)
     {
         return new SyntaxAnnotation(SourceEndLineAnnotationKind, origLinespan.EndLinePosition.Line.ToString(CultureInfo.InvariantCulture));
+    }
+
+    public static SyntaxAnnotation ExtraStaticUsing(ISymbol symbol)
+    {
+        return new SyntaxAnnotation(ExtraStaticUsingAnnotation, symbol.ToDisplayString());
     }
 }

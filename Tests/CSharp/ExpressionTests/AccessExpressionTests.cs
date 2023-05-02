@@ -528,6 +528,41 @@ internal partial class TestClass
     }
 
     [Fact]
+    public async Task TypePromotedModuleInSameNamespaceIsNotQualifiedAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Namespace TestNamespace
+    Public Module TestModule
+        Public Sub ModuleFunction()
+        End Sub
+    End Module
+
+    Class TestClass
+        Public Sub TestMethod()
+            ModuleFunction()
+        End Sub
+    End Class
+End Namespace", @"using static TestNamespace.TestModule;
+
+namespace TestNamespace
+{
+    public static partial class TestModule
+    {
+        public static void ModuleFunction()
+        {
+        }
+    }
+
+    internal partial class TestClass
+    {
+        public void TestMethod()
+        {
+            ModuleFunction();
+        }
+    }
+}");
+    }
+
+    [Fact]
     public async Task MemberAccessCasingAsync()
     {
         await TestConversionVisualBasicToCSharpAsync(@"Public Class Class1
@@ -597,7 +632,8 @@ Public Class TestIssue479
   End Sub
 End Class",
             @"using System;
-using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
+using static Microsoft.VisualBasic.Constants; // Install-Package Microsoft.VisualBasic
+using static Microsoft.VisualBasic.Strings; // Install-Package Microsoft.VisualBasic
 
 public partial class Issue479
 {
@@ -605,7 +641,7 @@ public partial class Issue479
     {
         get
         {
-            return 32768 + Strings.AscW(s);
+            return 32768 + AscW(s);
         }
     }
 }
@@ -615,7 +651,7 @@ public partial class TestIssue479
     public void compareAccess()
     {
         var hD = new Issue479();
-        Console.WriteLine(""Traditional access returns "" + hD[""X""] + Constants.vbCrLf + ""Default property access returns "" + hD[""X""] + Constants.vbCrLf + ""Dictionary access returns "" + hD[""X""]);
+        Console.WriteLine(""Traditional access returns "" + hD[""X""] + vbCrLf + ""Default property access returns "" + hD[""X""] + vbCrLf + ""Dictionary access returns "" + hD[""X""]);
     }
 }");
     }

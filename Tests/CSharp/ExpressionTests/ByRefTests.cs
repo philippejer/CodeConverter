@@ -205,7 +205,7 @@ public partial class Issue876
         Return """"
     End Function
 
-End Class", @"using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
+End Class", @"using static Microsoft.VisualBasic.Strings; // Install-Package Microsoft.VisualBasic
 
 public partial class Class1
 {
@@ -267,7 +267,7 @@ public partial class Class1
     public int Bar2(ref Class1 c1)
     {
         var argc1 = this;
-        if (c1 is not null && Strings.Len(Bar3(ref argc1)) != 0)
+        if (c1 is not null && Len(Bar3(ref argc1)) != 0)
         {
             return 1;
         }
@@ -660,28 +660,29 @@ Friend Module Other
 End Module", @"using System.Collections.Generic;
 using System.Diagnostics;
 using Microsoft.VisualBasic.CompilerServices; // Install-Package Microsoft.VisualBasic
+using static Other;
 
 public partial class Issue567
 {
     public void DoSomething(ref string str)
     {
-        Other.lst = new List<string>(new[] { 4.ToString(), 5.ToString(), 6.ToString() });
-        Other.lst2 = new List<object>(new[] { 4.ToString(), 5.ToString(), 6.ToString() });
+        lst = new List<string>(new[] { 4.ToString(), 5.ToString(), 6.ToString() });
+        lst2 = new List<object>(new[] { 4.ToString(), 5.ToString(), 6.ToString() });
         str = 999.ToString();
     }
 
     public void Main()
     {
-        var tmp = Other.lst;
+        var tmp = lst;
         string argstr = tmp[1];
         DoSomething(ref argstr);
         tmp[1] = argstr;
-        Debug.Assert((Other.lst[1] ?? """") == (4.ToString() ?? """"));
-        var tmp1 = Other.lst2;
+        Debug.Assert((lst[1] ?? """") == (4.ToString() ?? """"));
+        var tmp1 = lst2;
         string argstr1 = Conversions.ToString(tmp1[1]);
         DoSomething(ref argstr1);
         tmp1[1] = argstr1;
-        Debug.Assert(Conversions.ToBoolean(Operators.ConditionalCompareObjectEqual(Other.lst2[1], 5.ToString(), false)));
+        Debug.Assert(Conversions.ToBoolean(Operators.ConditionalCompareObjectEqual(lst2[1], 5.ToString(), false)));
     }
 
 }

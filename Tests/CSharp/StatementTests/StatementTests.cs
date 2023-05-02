@@ -1564,20 +1564,20 @@ CS0825: The contextual keyword 'var' may only appear within a local variable dec
                 Return ""e""
         End Select
     End Function
-End Class", @"using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
+End Class", @"using static Microsoft.VisualBasic.Strings; // Install-Package Microsoft.VisualBasic
 
 public partial class TestClass
 {
     public static string TimeAgo(string x)
     {
-        switch (Strings.UCase(x) ?? """")
+        switch (UCase(x) ?? """")
         {
-            case var @case when @case == (Strings.UCase(""a"") ?? """"):
-            case var case1 when case1 == (Strings.UCase(""b"") ?? """"):
+            case var @case when @case == (UCase(""a"") ?? """"):
+            case var case1 when case1 == (UCase(""b"") ?? """"):
                 {
                     return ""ab"";
                 }
-            case var case2 when case2 == (Strings.UCase(""c"") ?? """"):
+            case var case2 when case2 == (UCase(""c"") ?? """"):
                 {
                     return ""c"";
                 }

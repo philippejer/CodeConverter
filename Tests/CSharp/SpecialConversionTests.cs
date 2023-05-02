@@ -197,22 +197,22 @@ public partial class Issue483
         Return str_Txt
     End Function
 End Class", @"using System;
-using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
 using Microsoft.VisualBasic.CompilerServices; // Install-Package Microsoft.VisualBasic
+using static Microsoft.VisualBasic.Strings; // Install-Package Microsoft.VisualBasic
 
 public partial class Issue483
 {
     private string numstr(double aDouble)
     {
-        string str_Txt = Strings.Format(aDouble, ""0.000000"");
-        StringType.MidStmtStr(ref str_Txt, Strings.Len(str_Txt) - 6, 1, ""."");
-        StringType.MidStmtStr(ref str_Txt, Strings.Len(str_Txt) - 6, ""."".Length, ""."");
-        StringType.MidStmtStr(ref str_Txt, Strings.Len(str_Txt) - 6, aDouble.ToString().Length, aDouble.ToString());
+        string str_Txt = Format(aDouble, ""0.000000"");
+        StringType.MidStmtStr(ref str_Txt, Len(str_Txt) - 6, 1, ""."");
+        StringType.MidStmtStr(ref str_Txt, Len(str_Txt) - 6, ""."".Length, ""."");
+        StringType.MidStmtStr(ref str_Txt, Len(str_Txt) - 6, aDouble.ToString().Length, aDouble.ToString());
         Console.WriteLine(aDouble);
         if (aDouble > 5.0d)
         {
             var midTmp = numstr(aDouble - 1.0d);
-            StringType.MidStmtStr(ref str_Txt, Strings.Len(str_Txt) - 6, midTmp.Length, midTmp);
+            StringType.MidStmtStr(ref str_Txt, Len(str_Txt) - 6, midTmp.Length, midTmp);
         }
         return str_Txt;
     }
@@ -265,14 +265,14 @@ Class TestConversions
         Dim x = Chr(b)
         Dim y = ChrW(b)
    End Sub
-End Class", @"using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
+End Class", @"using static Microsoft.VisualBasic.Strings; // Install-Package Microsoft.VisualBasic
 
 internal partial class TestConversions
 {
     public void Test(byte b)
     {
-        char x = Strings.Chr(b);
-        char y = Strings.ChrW(b);
+        char x = Chr(b);
+        char y = ChrW(b);
     }
 }");
     }

@@ -65,7 +65,14 @@ internal class VbNameExpander : ISyntaxExpander
             semanticModel.GetOperation(node) is IMemberReferenceOperation { Instance: { Syntax: ExpressionSyntax promotedInstance }, Member: {} member }) {
             return MemberAccess(promotedInstance, SyntaxFactory.IdentifierName(member.Name));
         }
-        return IsOriginalSymbolGenericMethod(semanticModel, node) ? node : Simplifier.Expand(node, semanticModel, workspace);
+
+        var result = IsOriginalSymbolGenericMethod(semanticModel, node) ? node : Simplifier.Expand(node, semanticModel, workspace);
+
+        if (node is IdentifierNameSyntax && symbol != null &&  symbol.IsModuleMember()) {
+            result = result.WithAdditionalAnnotations(AnnotationConstants.ExtraStaticUsing(symbol.ContainingSymbol));
+        }
+
+        return result;
     }
 
     private static bool IsReducedExtensionInExtendedTypeOrDerivedType(SyntaxNode node, ISymbol symbol, SemanticModel semanticModel)
