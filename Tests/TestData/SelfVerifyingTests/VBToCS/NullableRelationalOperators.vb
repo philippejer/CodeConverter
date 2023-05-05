@@ -264,7 +264,7 @@ Public Class NullableRelationalOperatorsTests
     Public Sub TestNullableInCondition()
         Assert.True(NullableInIfCondition(Nothing))
         Assert.True(NullableInConditionalOperator(Nothing))
-        Assert.True(NullableInConditionalOperator(Nothing))
+        Assert.True(ComplexStatementInConditionalOperator(Nothing))
     End Sub
 
     Private Function NullableInIfCondition(x As Integer?) As Boolean
