@@ -227,6 +227,9 @@ internal partial class TestClass712
         Dim a As Boolean? = Nothing
         Dim b As Boolean? = Nothing
         Dim x As Boolean = False
+        Dim fa As Func(Of Boolean?) = Function() Nothing
+        Dim fb As Func(Of Boolean?) = Function() Nothing
+        Dim fx As Func(Of Boolean) = Function() False
 
         If a And b Then Return
         If a AndAlso b Then Return
@@ -234,16 +237,24 @@ internal partial class TestClass712
         If a AndAlso x Then Return
         If x And a Then Return
         If x AndAlso a Then Return
+        If a AndAlso fx() Then Return
+        If fa() AndAlso fx() Then Return
+        If a AndAlso fb() Then Return
+        If fa() AndAlso fb() Then Return
 
         Dim res As Boolean? = a And b
         res = a AndAlso b
         res = a And x
-        res = a AndAlso x 
+        res = a AndAlso x
         res = x And a
-        res = x AndAlso a 
-        
+        res = x AndAlso a
+        res = a AndAlso fx()
+        res = fa() AndAlso fx()
+        res = a AndAlso fb()
+        res = fa() AndAlso fb()
     End Sub
-End Class", @"
+End Class", @"using System;
+
 internal partial class TestClass
 {
     private void TestMethod()
@@ -251,27 +262,41 @@ internal partial class TestClass
         bool? a = default;
         bool? b = default;
         bool x = false;
+        Func<bool?> fa = () => default;
+        Func<bool?> fb = () => default;
+        Func<bool> fx = () => false;
 
         if ((a & b) == true)
             return;
-        if ((a is var arg1 && arg1.HasValue && !arg1.Value ? false : !(b is { } arg2) ? null : arg2 ? arg1 : false) == true)
+        if (a == true && b == true)
             return;
         if ((a & x) == true)
             return;
-        if ((a is var arg3 && !arg3.HasValue || arg3.Value) && x && arg3.HasValue)
+        if (a == true && x)
             return;
         if ((x & a) == true)
             return;
-        if (x && a.GetValueOrDefault())
+        if (x && a == true)
+            return;
+        if ((!a.HasValue || a.Value) && fx() && a.HasValue)
+            return;
+        if ((fa() is var arg1 && !arg1.HasValue || arg1.Value) && fx() && arg1.HasValue)
+            return;
+        if ((a == false ? false : fb() is not { } arg2 ? null : arg2 ? a : false) == true)
+            return;
+        if ((fa() is var arg4 && arg4 == false ? false : fb() is not { } arg3 ? null : arg3 ? arg4 : false) == true)
             return;
 
         var res = a & b;
-        res = a is var arg7 && arg7.HasValue && !arg7.Value ? false : !(b is { } arg8) ? null : arg8 ? arg7 : false;
+        res = a == false ? false : !b.HasValue ? null : b.Value ? a : false;
         res = a & x;
-        res = a is var arg9 && arg9.HasValue && !arg9.Value ? false : x ? arg9 : false;
+        res = a == false ? false : x ? a : false;
         res = x & a;
         res = x ? a : false;
-
+        res = a == false ? false : fx() ? a : false;
+        res = fa() is var arg5 && arg5 == false ? false : fx() ? arg5 : false;
+        res = a == false ? false : fb() is not { } arg6 ? null : arg6 ? a : false;
+        res = fa() is var arg8 && arg8 == false ? false : fb() is not { } arg7 ? null : arg7 ? arg8 : false;
     }
 }");
         }
@@ -311,21 +336,21 @@ internal partial class TestClass
 
         if ((a | b) == true)
             return;
-        if (a.GetValueOrDefault() || b.GetValueOrDefault())
+        if (a == true || b == true)
             return;
         if ((a | x) == true)
             return;
-        if (a.GetValueOrDefault() || x)
+        if (a == true || x)
             return;
         if ((x | a) == true)
             return;
-        if (x || a.GetValueOrDefault())
+        if (x || a == true)
             return;
 
         var res = a | b;
-        res = a is var arg1 && arg1.GetValueOrDefault() ? true : b is not { } arg2 ? null : arg2 ? true : arg1;
+        res = a is var arg1 && arg1 == true ? true : b is not { } arg2 ? null : arg2 ? true : arg1;
         res = a | x;
-        res = a is var arg3 && arg3.GetValueOrDefault() ? true : x ? true : arg3;
+        res = a is var arg3 && arg3 == true ? true : x ? true : arg3;
         res = x | a;
         res = x ? true : a;
 
@@ -493,7 +518,7 @@ public partial class TestForEnums
 {
     public static void WriteStatus(PasswordStatus? status)
     {
-        if (status.HasValue && status == PasswordStatus.Locked)
+        if (status == PasswordStatus.Locked)
         {
             Console.Write(""Locked"");
         }
@@ -565,43 +590,43 @@ internal partial class TestClass
         int? y = default;
         int a = 0;
 
-        if (x.HasValue && y.HasValue && x == y)
+        if (x.HasValue && x == y)
             return;
         if (x.HasValue && y.HasValue && x != y)
             return;
-        if (x.HasValue && y.HasValue && x > y)
+        if (x > y)
             return;
-        if (x.HasValue && y.HasValue && x >= y)
+        if (x >= y)
             return;
-        if (x.HasValue && y.HasValue && x < y)
+        if (x < y)
             return;
-        if (x.HasValue && y.HasValue && x <= y)
+        if (x <= y)
             return;
 
-        if (y.HasValue && a == y)
+        if (a == y)
             return;
         if (y.HasValue && a != y)
             return;
-        if (y.HasValue && a > y)
+        if (a > y)
             return;
-        if (y.HasValue && a >= y)
+        if (a >= y)
             return;
-        if (y.HasValue && a < y)
+        if (a < y)
             return;
-        if (y.HasValue && a <= y)
+        if (a <= y)
             return;
 
-        if (x.HasValue && x == a)
+        if (x == a)
             return;
         if (x.HasValue && x != a)
             return;
-        if (x.HasValue && x > a)
+        if (x > a)
             return;
-        if (x.HasValue && x >= a)
+        if (x >= a)
             return;
-        if (x.HasValue && x < a)
+        if (x < a)
             return;
-        if (x.HasValue && x <= a)
+        if (x <= a)
             return;
     }
 }");
@@ -668,7 +693,7 @@ internal partial class TestClass712
     {
         bool? var1 = default;
         bool? var2 = default;
-        return (object)(var1 is var arg1 && arg1.GetValueOrDefault() ? true : !var2 is not { } arg2 ? null : arg2 ? true : arg1);
+        return (object)(var1 is var arg1 && arg1 == true ? true : !var2 is not { } arg2 ? null : arg2 ? true : arg1);
     }
 }");
     }
@@ -689,7 +714,7 @@ internal partial class TestClass712
     {
         bool? var1 = default;
         bool? var2 = default;
-        if (var1.GetValueOrDefault() || (!var2).GetValueOrDefault())
+        if (var1 == true || !var2 == true)
             return true;
         else
             return false;

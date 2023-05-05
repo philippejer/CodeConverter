@@ -2607,7 +2607,7 @@ public partial class CrashTest
         {
             if (Flag1 && flag2)
             {
-                if ((int)crashEnum.GetValueOrDefault() > 0 && (!CrashClass.CrashEnum.HasValue ? true : CrashClass.CrashEnum is { } arg1 && crashEnum.HasValue ? crashEnum != arg1 : (bool?)null).GetValueOrDefault())
+                if ((int)crashEnum.GetValueOrDefault() > 0 && (!CrashClass.CrashEnum.HasValue ? true : crashEnum.HasValue && CrashClass.CrashEnum.HasValue ? crashEnum != CrashClass.CrashEnum : null) == true)
                 {
                     CrashClass.CrashEnum = crashEnum;
                     CrashClass.IsSet = true;

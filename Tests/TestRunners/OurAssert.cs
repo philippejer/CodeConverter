@@ -39,7 +39,11 @@ public static class OurAssert
 
     public static void Equal(object expectedText, object actualText, Func<string> getMessage)
     {
-        WithMessage(() => Assert.Equal(expectedText, actualText), getMessage);
+        WithMessage(() => {
+            if (!actualText.Equals(expectedText)) {
+                throw new Exception($"Converted code does not match expected code:{LineSplitter}{expectedText}{LineSplitter}{actualText}");
+            }
+        }, getMessage);
     }
 
     public static void WithMessage(Action assertion, Func<string> getMessage)
