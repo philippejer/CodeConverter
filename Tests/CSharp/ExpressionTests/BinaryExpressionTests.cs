@@ -422,6 +422,54 @@ internal partial class TestClass
         }
 
         [Fact]
+        public async Task RelationalOperatorsOnNullableTypeInComplexConditionAsync()
+        {
+            await TestConversionVisualBasicToCSharpAsync(@"Class TestClass
+    Private Sub TestMethod()
+        Dim x As Integer? = Nothing
+        Dim y As Integer? = Nothing
+        Dim a As Boolean? = Nothing
+        Dim b As Boolean? = Nothing
+        Dim fa As Func(Of Boolean?) = Function() Nothing
+        Dim fb As Func(Of Boolean?) = Function() Nothing
+
+        If x < y AndAlso a Then Return
+        If fa() AndAlso x < y Then Return
+        If x < y AndAlso fa() Then Return
+        If x < y OrElse a Then Return
+        If x < y = a Then Return
+        If x < y <> a Then Return
+    End Sub
+End Class", @"using System;
+
+internal partial class TestClass
+{
+    private void TestMethod()
+    {
+        int? x = default;
+        int? y = default;
+        bool? a = default;
+        bool? b = default;
+        Func<bool?> fa = () => default;
+        Func<bool?> fb = () => default;
+
+        if ((x.HasValue && y.HasValue ? x < y : null) == true && a == true)
+            return;
+        if (fa() == true && (x.HasValue && y.HasValue ? x < y : null) == true)
+            return;
+        if (((x.HasValue && y.HasValue ? x < y : (bool?)null) is var arg2 && arg2 == false ? false : fa() is not { } arg1 ? null : arg1 ? arg2 : false) == true)
+            return;
+        if ((x.HasValue && y.HasValue ? x < y : null) == true || a == true)
+            return;
+        if ((x.HasValue && y.HasValue ? x < y : (bool?)null) is { } arg3 && arg3 == a)
+            return;
+        if ((x.HasValue && y.HasValue ? x < y : (bool?)null) is { } arg4 && a.HasValue && arg4 != a)
+            return;
+    }
+}");
+        }
+
+        [Fact]
         public async Task SimplifiesAlreadyCheckedNullableComparison_HasValueAsync()
         {
             await TestConversionVisualBasicToCSharpAsync(@"
