@@ -453,17 +453,17 @@ internal partial class TestClass
         Func<bool?> fa = () => default;
         Func<bool?> fb = () => default;
 
-        if ((x.HasValue && y.HasValue ? x < y : null) == true && a == true)
+        if (x < y && a == true)
             return;
-        if (fa() == true && (x.HasValue && y.HasValue ? x < y : null) == true)
+        if (fa() == true && x < y)
             return;
         if (((x.HasValue && y.HasValue ? x < y : (bool?)null) is var arg2 && arg2 == false ? false : fa() is not { } arg1 ? null : arg1 ? arg2 : false) == true)
             return;
-        if ((x.HasValue && y.HasValue ? x < y : null) == true || a == true)
+        if (x < y || a == true)
             return;
-        if ((x.HasValue && y.HasValue ? x < y : (bool?)null) is { } arg3 && arg3 == a)
+        if (x < y == a)
             return;
-        if ((x.HasValue && y.HasValue ? x < y : (bool?)null) is { } arg4 && a.HasValue && arg4 != a)
+        if (x < y is { } arg3 && a.HasValue && arg3 != a)
             return;
     }
 }");

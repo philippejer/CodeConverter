@@ -54,7 +54,7 @@ internal class VisualBasicNullableExpressionsConverter
         }
         var isLhsNullable = IsNullable(vbNode.Left, lhs, lhsTypeInfo);
         var isRhsNullable = IsNullable(vbNode.Right, rhs, rhsTypeInfo);
-        if (!isLhsNullable && !isRhsNullable) return csBinExp.WithAdditionalAnnotations(IsNotNullableAnnotation);
+        if (!isLhsNullable && !isRhsNullable) return AddNotNullableAnnotation(csBinExp);
 
         return WithBinaryExpressionLogicForNullableTypes(vbNode, csBinExp, lhs, rhs, isLhsNullable, isRhsNullable);
     }
@@ -135,24 +135,23 @@ internal class VisualBasicNullableExpressionsConverter
         ExpressionSyntax lhs, ExpressionSyntax rhs,
         bool isLhsNullable, bool isRhsNullable)
     {
-
-        if (vbNode.AlwaysHasBooleanTypeInCSharp()) {
+        if (CanConvertToBoolean(vbNode)) {
             if (!isLhsNullable) {
-                return lhs.And(rhs.EqualsTrue());
+                return AddNotNullableAnnotation(lhs.And(rhs.EqualsTrue()));
             }
             if (IsPureExpression(vbNode.Right)) {
-                return !isRhsNullable ?
+                return AddNotNullableAnnotation(!isRhsNullable ?
                     lhs.EqualsTrue().And(rhs) :
-                    lhs.EqualsTrue().And(rhs.EqualsTrue());
+                    lhs.EqualsTrue().And(rhs.EqualsTrue()));
             }
             if (!isRhsNullable) {
                 if (IsSafelyReusable(vbNode.Left)) {
-                    return lhs.HasNoValue().OrGetValue(lhs).And(rhs).AndHasValue(lhs);
+                    return AddNotNullableAnnotation(lhs.HasNoValue().OrGetValue(lhs).And(rhs).AndHasValue(lhs));
                 }
                 var lhsPattern = PatternVar(lhs, out var lhsName);
-                return lhsPattern.AndHasNoValue(lhsName).OrGetValue(lhsName).And(rhs).AndHasValue(lhsName);
+                return AddNotNullableAnnotation(lhsPattern.AndHasNoValue(lhsName).OrGetValue(lhsName).And(rhs).AndHasValue(lhsName));
             }
-            return FullAndExpression().EqualsTrue();
+            return AddNotNullableAnnotation(FullAndExpression().EqualsTrue());
         }
 
         if (!isLhsNullable) {
@@ -188,13 +187,13 @@ internal class VisualBasicNullableExpressionsConverter
     private ExpressionSyntax ForOrElseOperator(VBSyntax.BinaryExpressionSyntax vbNode,
         ExpressionSyntax lhs, ExpressionSyntax rhs, bool isLhsNullable, bool isRhsNullable)
     {
-        if (vbNode.AlwaysHasBooleanTypeInCSharp()) {
+        if (CanConvertToBoolean(vbNode)) {
             if (!isLhsNullable) {
-                return lhs.Or(rhs.EqualsTrue());
+                return AddNotNullableAnnotation(lhs.Or(rhs.EqualsTrue()));
             }
-            return !isRhsNullable ?
+            return AddNotNullableAnnotation(!isRhsNullable ?
                 lhs.EqualsTrue().Or(rhs) :
-                lhs.EqualsTrue().Or(rhs.EqualsTrue());
+                lhs.EqualsTrue().Or(rhs.EqualsTrue()));
         }
 
         if (!isLhsNullable) {
@@ -215,19 +214,19 @@ internal class VisualBasicNullableExpressionsConverter
         BinaryExpressionSyntax csNode, ExpressionSyntax lhs, ExpressionSyntax rhs,
         bool isLhsNullable, bool isRhsNullable)
     {
-        var alwaysBooleanInCSharp = vbNode.AlwaysHasBooleanTypeInCSharp();
+        var canConvertToBoolean = CanConvertToBoolean(vbNode);
 
-        if (alwaysBooleanInCSharp) {
+        if (canConvertToBoolean) {
             if (vbNode.IsKind(VBasic.SyntaxKind.EqualsExpression) && (!isLhsNullable || !isRhsNullable)) {
                 // If one of the expressions cannot be null, equality gives the same boolean value in VB and CS
-                return csNode;
+                return AddNotNullableAnnotation(csNode);
             }
             if (vbNode.IsKind(VBasic.SyntaxKind.GreaterThanExpression)
                 || vbNode.IsKind(VBasic.SyntaxKind.GreaterThanOrEqualExpression)
                 || vbNode.IsKind(VBasic.SyntaxKind.LessThanExpression)
                 || vbNode.IsKind(VBasic.SyntaxKind.LessThanOrEqualExpression)) {
                 // These operator give the same boolean values in VB and CS
-                return csNode;
+                return AddNotNullableAnnotation(csNode);
             }
         }
 
@@ -255,7 +254,7 @@ internal class VisualBasicNullableExpressionsConverter
 
         // Ensure expressions/properties with side effects are evaluated the same number of times as before
         conditions.Sort((a, b) => a.ExecutionOptional.CompareTo(b.ExecutionOptional));
-        if (alwaysBooleanInCSharp && vbNode.IsKind(VBasic.SyntaxKind.EqualsExpression) && isLhsNullable && isRhsNullable) {
+        if (canConvertToBoolean && vbNode.IsKind(VBasic.SyntaxKind.EqualsExpression) && isLhsNullable && isRhsNullable) {
             // No need to check both expressions for null in this case
             conditions.RemoveAt(conditions.Count - 1);
         }
@@ -264,8 +263,8 @@ internal class VisualBasicNullableExpressionsConverter
 
         var bin = lhsName.Bin(rhsName, csNode.Kind());
 
-        if (alwaysBooleanInCSharp) {
-            return notNullCondition.And(bin);
+        if (canConvertToBoolean) {
+            return AddNotNullableAnnotation(notNullCondition.And(bin));
         }
 
         return notNullCondition.Conditional(bin, Null);
@@ -364,6 +363,27 @@ internal class VisualBasicNullableExpressionsConverter
 
         bool MatchesIdentifier(VBSyntax.ExpressionSyntax expr) =>
             expr.SkipIntoParens() is VBSyntax.IdentifierNameSyntax {Identifier.Text: { } identifierTextToCheck} && requiredIdentifierText.Equals(identifierTextToCheck, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Returns true when null is equivalent to false in the parent expression or statement
+    private bool CanConvertToBoolean(VBasic.Syntax.ExpressionSyntax e)
+    {
+        if (e.AlwaysHasBooleanTypeInCSharp()) return true;
+        if (e.SkipOutOfParens().Parent is VBSyntax.BinaryExpressionSyntax parent && CanConvertToBoolean(parent)) {
+            if (parent.IsKind(VBasic.SyntaxKind.AndAlsoExpression)) {
+                // If the left operand is Nothing, the right operand must be evaluated
+                return e != parent.Left || IsPureExpression(parent.Right);
+            }
+            return parent.IsKind(VBasic.SyntaxKind.OrElseExpression)
+                   || parent.IsKind(VBasic.SyntaxKind.EqualsExpression)
+                   || parent.IsKind(VBasic.SyntaxKind.NotEqualsExpression);
+        }
+        return false;
+    }
+
+    private ExpressionSyntax AddNotNullableAnnotation(ExpressionSyntax e)
+    {
+        return e.WithAdditionalAnnotations(IsNotNullableAnnotation);
     }
 }
 
