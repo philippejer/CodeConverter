@@ -29,4 +29,26 @@ internal static class VbSyntaxNodeExtensions
                parent is VBSyntax.ElseIfStatementSyntax elseIfStatement && elseIfStatement.Condition == vbNode ||
                parent is VBSyntax.TernaryConditionalExpressionSyntax ternary && ternary.Condition == vbNode;
     }
+
+    public static bool IsPureExpression(this VBSyntax.ExpressionSyntax e, SemanticModel semanticModel)
+    {
+        e = e.SkipIntoParens();
+        if (IsSafelyReusable(e, semanticModel)) return true;
+        if (e is VBSyntax.BinaryExpressionSyntax binaryExpression) {
+            return IsPureExpression(binaryExpression.Left, semanticModel) && IsSafelyReusable(binaryExpression.Right, semanticModel);
+        }
+        if (e is VBSyntax.UnaryExpressionSyntax unaryExpression) {
+            return IsPureExpression(unaryExpression.Operand, semanticModel);
+        }
+        return false;
+    }
+
+    public static bool IsSafelyReusable(this VBSyntax.ExpressionSyntax e, SemanticModel semanticModel)
+    {
+        e = e.SkipIntoParens();
+        if (e is VBSyntax.LiteralExpressionSyntax) return true;
+        var symbolInfo = VBasic.VisualBasicExtensions.GetSymbolInfo(semanticModel, e);
+        if (symbolInfo.Symbol is not { } s) return false;
+        return s.IsKind(SymbolKind.Local) || s.IsKind(SymbolKind.Field) || s.IsKind(SymbolKind.Parameter) || s.IsAutoProperty();
+    }
 }

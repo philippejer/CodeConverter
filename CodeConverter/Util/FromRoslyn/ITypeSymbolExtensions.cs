@@ -295,6 +295,12 @@ internal static class ITypeSymbolExtensions
 
         return false;
     }
+
+    public static bool IsBooleanType(this ITypeSymbol? type)
+    {
+        return type != null && (type.SpecialType == SpecialType.System_Boolean || type.GetNullableUnderlyingType().IsBooleanType());
+    }
+
     public static bool ContainsAnonymousType(this ITypeSymbol? symbol)
     {
         switch (symbol) {

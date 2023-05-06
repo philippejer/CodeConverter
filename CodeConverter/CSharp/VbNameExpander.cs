@@ -1,4 +1,5 @@
-﻿using ICSharpCode.CodeConverter.Util.FromRoslyn;
+﻿using System.Diagnostics;
+using ICSharpCode.CodeConverter.Util.FromRoslyn;
 using Microsoft.CodeAnalysis.Operations;
 using Microsoft.CodeAnalysis.Simplification;
 using Microsoft.CodeAnalysis.VisualBasic;
@@ -15,7 +16,7 @@ internal class VbNameExpander : ISyntaxExpander
         !ShouldExpandNode(node, semanticModel) && !IsRoslynInstanceExpressionBug(node as MemberAccessExpressionSyntax);
 
     public bool ShouldExpandNode(SyntaxNode node, SemanticModel semanticModel) =>
-        ShouldExpandName(node) || ShouldExpandMemberAccess(node, semanticModel);
+        ShouldExpandName(node) || ShouldExpandMemberAccess(node, semanticModel) || ShouldExpandBinaryExpression(node);
 
     private static bool ShouldExpandMemberAccess(SyntaxNode node, SemanticModel semanticModel)
     {
@@ -32,9 +33,16 @@ internal class VbNameExpander : ISyntaxExpander
     private static bool ShouldExpandName(SyntaxNode node) =>
         node is NameSyntax && NameCanBeExpanded(node);
 
+    private static bool ShouldExpandBinaryExpression(SyntaxNode node) =>
+        node is BinaryExpressionSyntax && node.IsKind(SyntaxKind.AndExpression, SyntaxKind.OrExpression);
+
     public SyntaxNode ExpandNode(SyntaxNode node, SemanticModel semanticModel,
         Workspace workspace)
     {
+        if (HandleNonShortCircuitingBooleanOperators(ref node, semanticModel)) {
+            return node;
+        }
+
         var symbol = semanticModel.GetSymbolInfo(node).Symbol;
         if (node is SimpleNameSyntax sns && GetDefaultImplicitInstance(sns, symbol, semanticModel) is {} defaultImplicitInstance)
         {
@@ -152,4 +160,35 @@ internal class VbNameExpander : ISyntaxExpander
 
     private static MemberAccessExpressionSyntax MemberAccess(ExpressionSyntax expressionSyntax, SimpleNameSyntax sns) =>
         SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, expressionSyntax, _dotToken, sns);
+
+    public bool HandleNonShortCircuitingBooleanOperators(ref SyntaxNode node, SemanticModel semanticModel)
+    {
+        if (node is not BinaryExpressionSyntax bin || !bin.Right.IsPureExpression(semanticModel)) {
+            return false;
+        }
+
+        Debug.Assert(node.IsKind(SyntaxKind.AndExpression, SyntaxKind.OrExpression));
+
+        var leftTypeInfo = semanticModel.GetTypeInfo(bin.Left).ConvertedType;
+        var rightTypeInfo = semanticModel.GetTypeInfo(bin.Right).ConvertedType;
+        if (!leftTypeInfo.IsBooleanType() || !rightTypeInfo.IsBooleanType()) {
+            return true;
+        }
+
+        for (var currentNode = (ExpressionSyntax)node; currentNode != null; currentNode = currentNode.Parent as ExpressionSyntax) {
+            if (currentNode.AlwaysHasBooleanTypeInCSharp()) {
+                if (node.IsKind(SyntaxKind.AndExpression)) {
+                    node = SyntaxFactory.BinaryExpression(SyntaxKind.AndAlsoExpression, bin.Left, SyntaxFactory.Token(SyntaxKind.AndAlsoKeyword), bin.Right);
+                    return true;
+                }
+
+                if (node.IsKind(SyntaxKind.OrExpression)) {
+                    node = SyntaxFactory.BinaryExpression(SyntaxKind.OrElseExpression, bin.Left, SyntaxFactory.Token(SyntaxKind.OrElseKeyword), bin.Right);
+                    return true;
+                }
+            }
+        }
+
+        return true;
+    }
 }

@@ -272,29 +272,12 @@ internal class VisualBasicNullableExpressionsConverter
 
     private bool IsPureExpression(VBasic.Syntax.ExpressionSyntax e)
     {
-        e = e.SkipIntoParens();
-        if (IsSafelyReusable(e)) return true;
-        if (e is VBSyntax.BinaryExpressionSyntax binaryExpression) {
-            return IsPureExpression(binaryExpression.Left) && IsSafelyReusable(binaryExpression.Right);
-        }
-        if (e is VBSyntax.UnaryExpressionSyntax unaryExpression) {
-            return IsPureExpression(unaryExpression.Operand);
-        }
-        return false;
+        return e.IsPureExpression(_semanticModel);
     }
 
     private bool IsSafelyReusable(VBasic.Syntax.ExpressionSyntax e)
     {
-        e = e.SkipIntoParens();
-        if (e is VBSyntax.LiteralExpressionSyntax) return true;
-        var symbolInfo = VBasic.VisualBasicExtensions.GetSymbolInfo(_semanticModel, e);
-        if (symbolInfo.Symbol is not { } s) return false;
-        return s.IsKind(SymbolKind.Local) || s.IsKind(SymbolKind.Field) || s.IsKind(SymbolKind.Parameter) || IsAutoProperty(s);
-    }
-
-    private static bool IsAutoProperty(ISymbol symbol)
-    {
-        return symbol.IsKind(SymbolKind.Property) && symbol.ContainingType.GetMembers().OfType<IFieldSymbol>().Any(field => SymbolEqualityComparer.Default.Equals(field.AssociatedSymbol, symbol));
+        return e.IsSafelyReusable(_semanticModel);
     }
 
     private KnownNullability? GetNullabilityWithinBooleanExpression(VBSyntax.ExpressionSyntax original)

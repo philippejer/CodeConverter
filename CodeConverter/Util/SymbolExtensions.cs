@@ -376,6 +376,11 @@ internal static class SymbolExtensions
     {
         return symbol is IMethodSymbol ms && (ms.IsGenericMethod || ms.IsReducedTypeParameterMethod());
     }
+
+    public static bool IsAutoProperty(this ISymbol symbol)
+    {
+        return symbol.IsKind(SymbolKind.Property) && symbol.ContainingType.GetMembers().OfType<IFieldSymbol>().Any(field => SymbolEqualityComparer.Default.Equals(field.AssociatedSymbol, symbol));
+    }
 }
 
 public enum SymbolVisibility

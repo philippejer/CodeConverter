@@ -266,15 +266,15 @@ internal partial class TestClass
         Func<bool?> fb = () => default;
         Func<bool> fx = () => false;
 
-        if ((a & b) == true)
+        if (a == true && b == true)
             return;
         if (a == true && b == true)
             return;
-        if ((a & x) == true)
+        if (a == true && x)
             return;
         if (a == true && x)
             return;
-        if ((x & a) == true)
+        if (x && a == true)
             return;
         if (x && a == true)
             return;
@@ -334,15 +334,15 @@ internal partial class TestClass
         bool? b = default;
         bool x = false;
 
-        if ((a | b) == true)
+        if (a == true || b == true)
             return;
         if (a == true || b == true)
             return;
-        if ((a | x) == true)
+        if (a == true || x)
             return;
         if (a == true || x)
             return;
-        if ((x | a) == true)
+        if (x || a == true)
             return;
         if (x || a == true)
             return;
@@ -793,6 +793,87 @@ public partial class ConversionInComparisonOperatorTest
         {
             Console.WriteLine(1);
         }
+    }
+}");
+    }
+
+    [Fact]
+    public async Task ReplaceNonShortCircuitingOperatorsWhenSafeAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Class TestClass
+    Private Sub TestBooleans()
+        Dim a As Boolean = False
+        Dim b As Boolean = False
+        Dim fa As Func(Of Boolean) = Function() False
+        Dim fb As Func(Of Boolean) = Function() False
+
+        If a And b Then Return
+        If fa() And b Then Return
+        If a And fb() Then Return
+
+        If a Or b Then Return
+        If fa() Or b Then Return
+        If a Or fb() Then Return
+    End Sub
+    Private Sub TestNullableBooleans()
+        Dim na As Boolean? = Nothing
+        Dim nb As Boolean? = Nothing
+        Dim fna As Func(Of Boolean?) = Function() Nothing
+        Dim fnb As Func(Of Boolean?) = Function() Nothing
+
+        If na And nb Then Return
+        If fna() And nb Then Return
+        If na And fnb() Then Return
+
+        If na Or nb Then Return
+        If fna() Or nb Then Return
+        If na Or fnb() Then Return
+    End Sub
+End Class", @"using System;
+
+internal partial class TestClass
+{
+    private void TestBooleans()
+    {
+        bool a = false;
+        bool b = false;
+        Func<bool> fa = () => false;
+        Func<bool> fb = () => false;
+
+        if (a && b)
+            return;
+        if (fa() && b)
+            return;
+        if (a & fb())
+            return;
+
+        if (a || b)
+            return;
+        if (fa() || b)
+            return;
+        if (a | fb())
+            return;
+    }
+    private void TestNullableBooleans()
+    {
+        bool? na = default;
+        bool? nb = default;
+        Func<bool?> fna = () => default;
+        Func<bool?> fnb = () => default;
+
+        if (na == true && nb == true)
+            return;
+        if (fna() == true && nb == true)
+            return;
+        if ((na & fnb()) == true)
+            return;
+
+        if (na == true || nb == true)
+            return;
+        if (fna() == true || nb == true)
+            return;
+        if ((na | fnb()) == true)
+            return;
     }
 }");
     }
