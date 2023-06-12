@@ -23,30 +23,16 @@ internal static class SyntaxExtensions
 
     public static VBSyntax.ExpressionSyntax SkipIntoParens(this VBSyntax.ExpressionSyntax expression)
     {
-        if (expression == null)
-            return null;
         while (expression is VBSyntax.ParenthesizedExpressionSyntax pes) {
             expression = pes.Expression;
         }
         return expression;
     }
 
-    public static CS.Syntax.ExpressionSyntax SkipOutOfParens(this CS.Syntax.ExpressionSyntax expression)
+    public static SyntaxNode SkipOutOfParens(this SyntaxNode expression)
     {
-        if (expression == null)
-            return null;
-        while (expression is CS.Syntax.ParenthesizedExpressionSyntax pes) {
-            expression = pes.Parent as CS.Syntax.ExpressionSyntax;
-        }
-        return expression;
-    }
-
-    public static VBSyntax.ExpressionSyntax SkipOutOfParens(this VBSyntax.ExpressionSyntax expression)
-    {
-        if (expression == null)
-            return null;
         while (expression is VBSyntax.ParenthesizedExpressionSyntax pes) {
-            expression = pes.Parent as VBSyntax.ExpressionSyntax;
+            expression = pes.Parent;
         }
         return expression;
     }

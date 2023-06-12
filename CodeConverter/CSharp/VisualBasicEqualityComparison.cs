@@ -1,4 +1,6 @@
 ﻿using System.Globalization;
+using Microsoft.CodeAnalysis;
+using System.Xml.Linq;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.VisualBasic.CompilerServices;
@@ -75,17 +77,25 @@ internal class VisualBasicEqualityComparison
 
     public (ExpressionSyntax lhs, ExpressionSyntax rhs) VbCoerceToNonNullString(VBSyntax.ExpressionSyntax vbLeft, ExpressionSyntax csLeft, TypeInfo lhsTypeInfo, bool leftKnownNotNull, VBSyntax.ExpressionSyntax vbRight, ExpressionSyntax csRight, TypeInfo rhsTypeInfo, bool rightKnownNotNull)
     {
-        if (IsNonEmptyStringLiteral(vbLeft) || IsNonEmptyStringLiteral(vbRight)) {
+        if (IsNonEmptyString(vbLeft) || IsNonEmptyString(vbRight)) {
             // If one of the strings is "foo", the other string won't equal it if it's null or empty, so it doesn't matter which one we use in comparison
             return (csLeft, csRight);
         }
         return (VbCoerceToNonNullString(vbLeft, csLeft, lhsTypeInfo, leftKnownNotNull), VbCoerceToNonNullString(vbRight, csRight, rhsTypeInfo, rightKnownNotNull));
     }
 
-    private static bool IsNonEmptyStringLiteral(VBSyntax.ExpressionSyntax vbExpr)
+    public bool IsNonEmptyString(VBSyntax.ExpressionSyntax vbExpr)
     {
         vbExpr = vbExpr.SkipIntoParens();
-        return vbExpr.IsKind(VBSyntaxKind.StringLiteralExpression) && vbExpr is VBSyntax.LiteralExpressionSyntax literal && !IsEmptyString(literal);
+        if (vbExpr.IsKind(VBSyntaxKind.StringLiteralExpression) && vbExpr is VBSyntax.LiteralExpressionSyntax literal && !IsEmptyString(literal)) return true;
+        var value = _semanticModel.GetConstantValue(vbExpr);
+        if (value.HasValue && !string.IsNullOrEmpty(value.Value?.ToString())) return true;
+        // ISymbol symbol = _semanticModel.GetSymbolInfo(vbExpr).Symbol;
+        if (vbExpr is VBSyntax.InvocationExpressionSyntax { Expression: VBSyntax.MemberAccessExpressionSyntax maes } && maes.Name.Identifier.ValueText == "ToString") {
+            value = _semanticModel.GetConstantValue(maes.Expression);
+            if (value.HasValue && !string.IsNullOrEmpty(value.Value?.ToString())) return true;
+        }
+        return false;
     }
 
     public ExpressionSyntax VbCoerceToNonNullString(VBSyntax.ExpressionSyntax vbNode, ExpressionSyntax csNode, TypeInfo typeInfo, bool knownNotNull = false)
@@ -98,8 +108,9 @@ internal class VisualBasicEqualityComparison
             return csNode;
         }
 
+        ExtraUsingDirectives.Add("Cnr.GdpShared.StringExtensions");
         csNode = typeInfo.Type?.SpecialType == SpecialType.System_String
-            ? Coalesce(csNode, EmptyStringExpression()).AddParens()
+            ? SyntaxFactory.InvocationExpression(ValidSyntaxFactory.MemberAccess(csNode, "NonNull"))
             : Coalesce(csNode, EmptyCharArrayExpression());
 
         return VbCoerceToString(csNode, typeInfo);

@@ -22,12 +22,12 @@ internal static class VbSyntaxNodeExtensions
 
     public static bool AlwaysHasBooleanTypeInCSharp(this VBSyntax.ExpressionSyntax vbNode)
     {
-        var parent = vbNode.SkipOutOfParens()?.Parent;
+        var parent = vbNode.Parent.SkipOutOfParens();
 
-        return parent is VBSyntax.SingleLineIfStatementSyntax singleLine && singleLine.Condition == vbNode ||
-               parent is VBSyntax.IfStatementSyntax ifStatement && ifStatement.Condition == vbNode ||
-               parent is VBSyntax.ElseIfStatementSyntax elseIfStatement && elseIfStatement.Condition == vbNode ||
-               parent is VBSyntax.TernaryConditionalExpressionSyntax ternary && ternary.Condition == vbNode;
+        return parent is VBSyntax.SingleLineIfStatementSyntax singleLine && singleLine.Condition.SkipIntoParens() == vbNode.SkipIntoParens() ||
+               parent is VBSyntax.IfStatementSyntax ifStatement && ifStatement.Condition.SkipIntoParens() == vbNode.SkipIntoParens() ||
+               parent is VBSyntax.ElseIfStatementSyntax elseIfStatement && elseIfStatement.Condition.SkipIntoParens() == vbNode.SkipIntoParens() ||
+               parent is VBSyntax.TernaryConditionalExpressionSyntax ternary && ternary.Condition.SkipIntoParens() == vbNode.SkipIntoParens();
     }
 
     public static bool IsPureExpression(this VBSyntax.ExpressionSyntax e, SemanticModel semanticModel)
@@ -35,7 +35,7 @@ internal static class VbSyntaxNodeExtensions
         e = e.SkipIntoParens();
         if (IsSafelyReusable(e, semanticModel)) return true;
         if (e is VBSyntax.BinaryExpressionSyntax binaryExpression) {
-            return IsPureExpression(binaryExpression.Left, semanticModel) && IsSafelyReusable(binaryExpression.Right, semanticModel);
+            return IsPureExpression(binaryExpression.Left, semanticModel) && IsPureExpression(binaryExpression.Right, semanticModel);
         }
         if (e is VBSyntax.UnaryExpressionSyntax unaryExpression) {
             return IsPureExpression(unaryExpression.Operand, semanticModel);

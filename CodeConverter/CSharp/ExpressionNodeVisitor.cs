@@ -797,7 +797,7 @@ internal class ExpressionNodeVisitor : VBasic.VisualBasicSyntaxVisitor<Task<CSha
         SyntaxKind csTokenKind = CSharpUtil.GetExpressionOperatorTokenKind(kind);
 
         if (kind == SyntaxKind.LogicalNotExpression && _semanticModel.GetTypeInfo(node.Operand).ConvertedType is { } t) {
-            if (t.IsNumericType() || t.IsEnumType()) {
+            if (t.IsNumericType() || t.IsEnumType(includeNullableTypes: true)) {
                 csTokenKind = SyntaxKind.TildeToken;
             } else if (await NegateAndSimplifyOrNullAsync(node, expr, t) is { } simpleNegation) {
                 return simpleNegation;

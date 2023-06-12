@@ -106,6 +106,7 @@ internal class DeclarationNodeVisitor : VBasic.VisualBasicSyntaxVisitor<Task<CSh
                 .Where(m => !Regex.IsMatch(m, @"[.]MyProject$"))
                 .Where(m => !Regex.IsMatch(m, @"[.]MergedMsVbNamespace"))
                 .Where(m => !Regex.IsMatch(m, @"[.]My[.]Resources[.]")));
+        ProjectConversion.AddDirtyNote(node, $"Extra static usings: {string.Join(", " ,extraStaticUsingDirectives)}");
 
         var usings = await importsClauses
             .SelectAsync(async c => await c.AcceptAsync<UsingDirectiveSyntax>(TriviaConvertingDeclarationVisitor));

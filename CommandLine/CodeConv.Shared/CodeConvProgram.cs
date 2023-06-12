@@ -40,18 +40,26 @@ public partial class CodeConvProgram
 #pragma warning restore IDE0052 // Remove unread private members
 
     [FileExists]
-    [Required]
+    // [Required]
     [Argument(0, "Source solution path", "The solution containing project(s) to be converted.")]
-    public string SolutionPath { get; } = "";
+    // public string SolutionPath { get; } = "C:/Projets/GDP/PRD/Cnr.GdpPrd.Integration.sln";
+    // public string SolutionPath { get; } = "C:/Projets/GDP/ECH/Cnr.GdpEch.sln";
+    // public string SolutionPath { get; } = "C:/Projets/GDP/REQ/Cnr.GdpReq.sln";
+    // public string SolutionPath { get; } = "C:/Projets/GDP/PEC_Integration/Cnr.Integration.sln";
+    // public string SolutionPath { get; } = "C:/Projets/GDP/IPA/Cnr.GdpIpa.sln";
+    // public string SolutionPath { get; } = "C:/Projets/GDP/FRN/Cnr.GdpFrn.sln";
+    public string SolutionPath { get; } = "C:/Projets/GDP/PEC_WebService/Cnr.GdpPec.WebService.sln";
 
     [Option("-i|--include", "Regex matching project file paths to convert. Can be used multiple times", CommandOptionType.MultipleValue)]
     public string[] Include { get; } = Array.Empty<string>();
+    // public string[] Include { get; } = { "ProjectToConvert" };
 
     [Option("-e|--exclude", "Regex matching project file paths to exclude from conversion. Can be used multiple times", CommandOptionType.MultipleValue)]
-    public string[] Exclude { get; } = Array.Empty<string>();
+    // public string[] Exclude { get; } = Array.Empty<string>();
+    public string[] Exclude { get; } = { "Cnr\\.GdpBdd\\.*" };
 
     [Option("-t|--target-language", "The language to convert to.", CommandOptionType.SingleValue, ValueName = nameof(Language.CS) + " | " + nameof(Language.VB))]
-    public Language? TargetLanguage { get; }
+    public Language? TargetLanguage { get; } = Language.CS;
 
     [Option("-f|--force", "Wipe the output directory before conversion", CommandOptionType.NoValue)]
     public bool Force { get; }

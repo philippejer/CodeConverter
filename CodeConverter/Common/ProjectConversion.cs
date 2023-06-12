@@ -199,6 +199,8 @@ public class ProjectConversion
         await foreach (var result in _projectContentsConverter.GetAdditionalConversionResultsAsync(_additionalDocumentsToConvert, _cancellationToken)) {
             yield return result;
         }
+
+        OutputDirtyNotes();
     }
 
     private ConversionResult CreateConversionResult(WipFileConversion<SyntaxNode> r)
@@ -349,5 +351,43 @@ public class ProjectConversion
     {
         JoinableTaskFactorySingleton.EnsureInitialized();
         await new SynchronizationContextRemover();
+    }
+
+    private static readonly List<(FileLinePositionSpan span, string message)> DirtyNotes = new();
+
+    public static void AddDirtyNote(SyntaxNode node, string message)
+    {
+        lock (DirtyNotes) {
+            DirtyNotes.Add((node.SyntaxTree.GetLineSpan(node.FullSpan), message));
+        }
+    }
+
+    private void OutputDirtyNotes()
+    {
+        lock(DirtyNotes) {
+            if (DirtyNotes.IsEmpty()) return;
+            Console.Out.WriteLine();
+            Console.Out.WriteLine("-> CONVERSION NOTES");
+            Console.Out.WriteLine();
+            DirtyNotes.ForEach(note => {
+                Console.Out.WriteLine($"{PathRelativeToSolutionDir(note.span.Path)}({note.span.Span.Start.Line + 1}, {note.span.Span.Start.Character + 1}): {note.message}");
+                if (File.Exists(note.span.Path)) {
+                    string line = File.ReadLines(note.span.Path).Skip(note.span.Span.Start.Line).Take(1).First();
+                    Console.Out.WriteLine($"{line}");
+                    for (int i = 0; i < note.span.Span.Start.Character; i++) {
+                        Console.Out.Write(" ");
+                    }
+
+                    for (int i = 0; i < note.span.Span.End.Character - note.span.Span.Start.Character - 1; i++) {
+                        Console.Out.Write("^");
+                    }
+                }
+
+                Console.Out.WriteLine();
+            });
+            Console.Out.WriteLine("<- CONVERSION NOTES");
+            Console.Out.WriteLine();
+            DirtyNotes.Clear();
+        }
     }
 }

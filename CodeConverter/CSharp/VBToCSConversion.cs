@@ -54,6 +54,20 @@ public class VBToCSConversion : ILanguageConversion
             (@"\.vb<", @".cs<"),
             (@"<\s*Generator\s*>\s*VbMyResourcesResXFileCodeGenerator\s*</\s*Generator\s*>", @"<Generator>ResXFileCodeGenerator</Generator>"),
             (@"(<\s*CustomToolNamespace\s*>)(.*</\s*CustomToolNamespace\s*>)", @$"$1{rootNamespaceDot}$2"), // <CustomToolNamespace>My.Resources</CustomToolNamespace>
+
+            // (@"\r\n\s*<WarningsAsErrors>[^<]*</WarningsAsErrors>", @""),
+            // (@"\r\n\s*<SccProjectName>[^<]*</SccProjectName>", @""),
+            // (@"\r\n\s*<SccLocalPath>[^<]*</SccLocalPath>", @""),
+            // (@"\r\n\s*<SccAuxPath>[^<]*</SccAuxPath>", @""),
+            // (@"\r\n\s*<SccProvider>[^<]*</SccProvider>", @""),
+            // (@"\r\n\s*<MyType>[^<]*</MyType>", @""),
+            // (@"\r\n\s*<PropertyGroup>\r\n\s*<OptionExplicit>[^<]*</OptionExplicit>\r\n\s*</PropertyGroup>", @""),
+            // (@"\r\n\s*<PropertyGroup>\r\n\s*<OptionCompare>[^<]*</OptionCompare>\r\n\s*</PropertyGroup>", @""),
+            // (@"\r\n\s*<PropertyGroup>\r\n\s*<OptionStrict>[^<]*</OptionStrict>\r\n\s*</PropertyGroup>", @""),
+            // (@"\r\n\s*<PropertyGroup>\r\n\s*<OptionInfer>[^<]*</OptionInfer>\r\n\s*</PropertyGroup>", @""),
+            // (@"\r\n\s*<Import Include=\""[^""]*\"" />", @""),
+            // (@"\r\n\s*<ItemGroup>[^<]*</ItemGroup>", @""),
+            // (@"\r\n\s*<DocumentationFile>[^<]*</DocumentationFile>", @""),
         };
     }
 
@@ -62,7 +76,7 @@ public class VBToCSConversion : ILanguageConversion
         var xmlDoc = XDocument.Parse(xml);
         XNamespace xmlNs = xmlDoc.Root.GetDefaultNamespace();
 
-        ProjectFileTextEditor.WithUpdatedDefaultItemExcludes(xmlDoc, xmlNs, "cs", "vb");
+        // ProjectFileTextEditor.WithUpdatedDefaultItemExcludes(xmlDoc, xmlNs, "cs", "vb");
         AddVisualBasicReference(xmlDoc, xmlNs);
         AddLangVersion(xmlDoc, xmlNs);
 

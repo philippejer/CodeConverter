@@ -223,7 +223,7 @@ internal class TypeConversionAnalyzer
 
     private CSSyntax.NameSyntax GetCommonDelegateTypeOrNull(VBSyntax.ExpressionSyntax vbNode, ITypeSymbol vbConvertedType)
     {
-        var parentExceptParentheses = vbNode.Parent is VBSyntax.ExpressionSyntax parentExp ? parentExp.SkipOutOfParens() : vbNode.Parent;
+        var parentExceptParentheses = vbNode.Parent.SkipOutOfParens();
         if (vbConvertedType.Name != nameof(Delegate) &&
             (parentExceptParentheses is VBSyntax.SimpleArgumentSyntax || parentExceptParentheses is VBSyntax.EqualsValueSyntax)) {
             return null;
@@ -328,7 +328,7 @@ internal class TypeConversionAnalyzer
             return true;
         } 
         else if (csConversion.IsNullable && csConvertedType.SpecialType == SpecialType.System_Boolean && vbNode.AlwaysHasBooleanTypeInCSharp() &&
-                 (vbNode is not VBSyntax.BinaryExpressionSyntax and not VBSyntax.UnaryExpressionSyntax || vbNode.IsKind(VBasic.SyntaxKind.AndExpression, VBasic.SyntaxKind.OrExpression, VBasic.SyntaxKind.ExclusiveOrExpression))) {
+                 (vbNode.SkipIntoParens() is not VBSyntax.BinaryExpressionSyntax and not VBSyntax.UnaryExpressionSyntax || vbNode.SkipIntoParens().IsKind(VBasic.SyntaxKind.AndExpression, VBasic.SyntaxKind.OrExpression, VBasic.SyntaxKind.ExclusiveOrExpression))) {
             typeConversionKind = TypeConversionKind.NullableBool;
             return true;
         }

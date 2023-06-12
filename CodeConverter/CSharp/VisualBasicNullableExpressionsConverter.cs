@@ -352,10 +352,10 @@ internal class VisualBasicNullableExpressionsConverter
     private bool CanConvertToBoolean(VBasic.Syntax.ExpressionSyntax e)
     {
         if (e.AlwaysHasBooleanTypeInCSharp()) return true;
-        if (e.SkipOutOfParens().Parent is VBSyntax.BinaryExpressionSyntax parent && CanConvertToBoolean(parent)) {
+        if (e.Parent.SkipOutOfParens() is VBSyntax.BinaryExpressionSyntax parent && CanConvertToBoolean(parent)) {
             if (parent.IsKind(VBasic.SyntaxKind.AndAlsoExpression)) {
                 // If the left operand is Nothing, the right operand must be evaluated
-                return e != parent.Left || IsPureExpression(parent.Right);
+                return e != parent.Left.SkipIntoParens() || IsPureExpression(parent.Right);
             }
             return parent.IsKind(VBasic.SyntaxKind.OrElseExpression)
                    || parent.IsKind(VBasic.SyntaxKind.EqualsExpression)

@@ -178,11 +178,13 @@ internal class VbNameExpander : ISyntaxExpander
         for (var currentNode = (ExpressionSyntax)node; currentNode != null; currentNode = currentNode.Parent as ExpressionSyntax) {
             if (currentNode.AlwaysHasBooleanTypeInCSharp()) {
                 if (node.IsKind(SyntaxKind.AndExpression)) {
+                    ProjectConversion.AddDirtyNote(node, "Replaced And with AndAlso");
                     node = SyntaxFactory.BinaryExpression(SyntaxKind.AndAlsoExpression, bin.Left, SyntaxFactory.Token(SyntaxKind.AndAlsoKeyword), bin.Right);
                     return true;
                 }
 
                 if (node.IsKind(SyntaxKind.OrExpression)) {
+                    ProjectConversion.AddDirtyNote(node, "Replaced Or with OrElse");
                     node = SyntaxFactory.BinaryExpression(SyntaxKind.OrElseExpression, bin.Left, SyntaxFactory.Token(SyntaxKind.OrElseKeyword), bin.Right);
                     return true;
                 }

@@ -51,6 +51,12 @@ public static class ConversionResultWriter
             }
 
             File.WriteAllText(targetFilePath, conversionResult.ConvertedCode);
+            // if (Path.GetExtension(targetFilePath) != ".sln") {
+            //     Console.WriteLine($"Writing {targetFilePath}");
+            //     File.WriteAllText(targetFilePath, conversionResult.ConvertedCode);
+            // } else {
+            //     Console.WriteLine($"Not writing {targetFilePath}");
+            // }
         }
 
         if (!sourceAndTargetSame) {

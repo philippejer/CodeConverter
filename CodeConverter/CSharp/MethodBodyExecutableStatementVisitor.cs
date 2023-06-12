@@ -743,16 +743,18 @@ internal class MethodBodyExecutableStatementVisitor : VBasic.VisualBasicSyntaxVi
         var isStringComparison = switchExprTypeInfo.ConvertedType?.SpecialType == SpecialType.System_String || switchExprTypeInfo.ConvertedType?.IsArrayOf(SpecialType.System_Char) == true;
         var caseInsensitiveStringComparison = vbEquality.OptionCompareTextCaseInsensitive &&
                                               isStringComparison;
-        if (isStringComparison) {
-            csSwitchExpr = vbEquality.VbCoerceToNonNullString(vbExpr, csSwitchExpr, switchExprTypeInfo);
-        }
 
+        bool allNonEmptyStrings = true;
         var usedConstantValues = new HashSet<object>();
         var sections = new List<SwitchSectionSyntax>();
         foreach (var block in node.CaseBlocks) {
             var labels = new List<SwitchLabelSyntax>();
             foreach (var c in block.CaseStatement.Cases) {
+                bool nonEmptyString = false;
+
                 if (c is VBSyntax.SimpleCaseClauseSyntax s) {
+                    if (isStringComparison && vbEquality.IsNonEmptyString(s.Value)) nonEmptyString = true;
+
                     var originalExpressionSyntax = await s.Value.AcceptAsync<ExpressionSyntax>(_expressionVisitor);
                     var caseTypeInfo = _semanticModel.GetTypeInfo(s.Value);
                     var typeConversionKind = CommonConversions.TypeConversionAnalyzer.AnalyzeConversion(s.Value);
@@ -792,6 +794,8 @@ internal class MethodBodyExecutableStatementVisitor : VBasic.VisualBasicSyntaxVi
                 } else {
                     throw new NotSupportedException(c.Kind().ToString());
                 }
+
+                if (!nonEmptyString) allNonEmptyStrings = false;
             }
 
             var csBlockStatements = (await ConvertStatementsAsync(block.Statements)).ToList();
@@ -800,6 +804,10 @@ internal class MethodBodyExecutableStatementVisitor : VBasic.VisualBasicSyntaxVi
             }
             var list = SingleStatement(SyntaxFactory.Block(csBlockStatements));
             sections.Add(SyntaxFactory.SwitchSection(SyntaxFactory.List(labels), list));
+        }
+
+        if (isStringComparison && !allNonEmptyStrings) {
+            csSwitchExpr = vbEquality.VbCoerceToNonNullString(vbExpr, csSwitchExpr, switchExprTypeInfo);
         }
 
         var switchStatementSyntax = ValidSyntaxFactory.SwitchStatement(csSwitchExpr, sections);

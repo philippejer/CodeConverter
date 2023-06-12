@@ -260,45 +260,53 @@ internal static class ITypeSymbolExtensions
     public static bool IsIntegralType(this ITypeSymbol? type) => type.IsNumericType() && !type.IsFractionalNumericType();
     public static bool IsIntegralOrEnumType(this ITypeSymbol? type) => type.IsIntegralType() || type.IsEnumType();
 
-    public static bool IsFractionalNumericType(this ITypeSymbol? type)
+    public static bool IsFractionalNumericType(this ITypeSymbol? type, bool includeNullableTypes = false)
     {
-        if (type != null) {
-            switch (type.SpecialType) {
-                case SpecialType.System_Single:
-                case SpecialType.System_Double:
-                case SpecialType.System_Decimal:
-                    return true;
-            }
+        if (type == null) {
+            return false;
         }
 
-        return false;
-    }
-
-    public static bool IsNumericType(this ITypeSymbol? type)
-    {
-        if (type != null) {
-            switch (type.SpecialType) {
-                case SpecialType.System_Byte:
-                case SpecialType.System_SByte:
-                case SpecialType.System_Int16:
-                case SpecialType.System_UInt16:
-                case SpecialType.System_Int32:
-                case SpecialType.System_UInt32:
-                case SpecialType.System_Int64:
-                case SpecialType.System_UInt64:
-                case SpecialType.System_Single:
-                case SpecialType.System_Double:
-                case SpecialType.System_Decimal:
-                    return true;
-            }
+        switch (type.SpecialType) {
+            case SpecialType.System_Single:
+            case SpecialType.System_Double:
+            case SpecialType.System_Decimal:
+                return true;
         }
 
-        return false;
+        return includeNullableTypes && type.GetNullableUnderlyingType().IsFractionalNumericType();
     }
 
-    public static bool IsBooleanType(this ITypeSymbol? type)
+    public static bool IsNumericType(this ITypeSymbol? type, bool includeNullableTypes = false)
     {
-        return type != null && (type.SpecialType == SpecialType.System_Boolean || type.GetNullableUnderlyingType().IsBooleanType());
+        if (type == null) {
+            return false;
+        }
+
+        switch (type.SpecialType) {
+            case SpecialType.System_Byte:
+            case SpecialType.System_SByte:
+            case SpecialType.System_Int16:
+            case SpecialType.System_UInt16:
+            case SpecialType.System_Int32:
+            case SpecialType.System_UInt32:
+            case SpecialType.System_Int64:
+            case SpecialType.System_UInt64:
+            case SpecialType.System_Single:
+            case SpecialType.System_Double:
+            case SpecialType.System_Decimal:
+                return true;
+        }
+
+        return includeNullableTypes && type.GetNullableUnderlyingType().IsNumericType();
+    }
+
+    public static bool IsBooleanType(this ITypeSymbol? type, bool includeNullableTypes = false)
+    {
+        if (type == null) {
+            return false;
+        }
+
+        return type.SpecialType == SpecialType.System_Boolean || includeNullableTypes && type.GetNullableUnderlyingType().IsBooleanType();
     }
 
     public static bool ContainsAnonymousType(this ITypeSymbol? symbol)
@@ -535,18 +543,22 @@ internal static class ITypeSymbolExtensions
         return allTypeArgs1.AreMoreSpecificThan(allTypeArgs2);
     }
 
-    public static bool IsEnumType(this ITypeSymbol? type)
+    public static bool IsEnumType(this ITypeSymbol? type, bool includeNullableTypes = false)
     {
         if (type == null) {
             return false;
         }
 
-        return type.IsValueType && type.TypeKind == TypeKind.Enum;
+        return type.IsValueType && type.TypeKind == TypeKind.Enum || includeNullableTypes && type.GetNullableUnderlyingType().IsEnumType();
     }
 
-    public static bool IsDateType(this ITypeSymbol type)
+    public static bool IsDateType(this ITypeSymbol type, bool includeNullableTypes = false)
     {
-        return type.SpecialType == SpecialType.System_DateTime;
+        if (type == null) {
+            return false;
+        }
+
+        return type.SpecialType == SpecialType.System_DateTime || includeNullableTypes && type.GetNullableUnderlyingType().IsDateType();
     }
 
     /// <remarks>

@@ -65,9 +65,10 @@ internal class VBToCSProjectContentsConverter : IProjectContentsConverter
 
     private async Task<Project> WithProjectLevelWinformsAdjustmentsAsync(Project project)
     {
-        if (!_useProjectLevelWinformsAdjustments) return project;
-        return await project.WithAdditionalDocs(_designerToResxRelativePath.Values)
-            .WithRenamedMergedMyNamespaceAsync(_cancellationToken);
+        return project;
+        // if (!_useProjectLevelWinformsAdjustments) return project;
+        // return await project.WithAdditionalDocs(_designerToResxRelativePath.Values)
+        //     .WithRenamedMergedMyNamespaceAsync(_cancellationToken);
     }
 
     public string LanguageVersion { get { return LangVersion.Latest.ToDisplayString(); } }
