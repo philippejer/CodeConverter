@@ -112,6 +112,7 @@ internal class TypeConversionAnalyzer
             case TypeConversionKind.Conversion:
                 return AddExplicitConvertTo(vbNode, csNode, vbType, vbConvertedType);
             case TypeConversionKind.NullableBool:
+                if (VisualBasicNullableExpressionsConverter.IsKnownNonNullable(csNode)) return csNode;
                 return SyntaxFactory.BinaryExpression(SyntaxKind.EqualsExpression, csNode,
                     LiteralConversions.GetLiteralExpression(true));
             case TypeConversionKind.StringToCharArray:

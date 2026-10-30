@@ -243,6 +243,253 @@ internal partial class TestClass712
 }");
         }
 
+        [Theory]
+        [InlineData("Boolean", "Boolean", "And", "&&", "", "")]
+        [InlineData("Boolean", "Boolean", "Or", "||", "", "")]
+        [InlineData("Boolean?", "Boolean?", "And", "&&", " == true", " == true")]
+        [InlineData("Boolean?", "Boolean?", "Or", "||", " == true", " == true")]
+        [InlineData("Boolean?", "Boolean", "And", "&&", " == true", "")]
+        [InlineData("Boolean?", "Boolean", "Or", "||", " == true", "")]
+        [InlineData("Boolean", "Boolean?", "And", "&&", "", " == true")]
+        [InlineData("Boolean", "Boolean?", "Or", "||", "", " == true")]
+        public async Task EagerBooleanConditionCanOmitLeafRightOperandAsync(string vbLeftType, string vbRightType, string vbOperator, string csOperator, string leftTrueTest, string rightTrueTest)
+        {
+            var csLeftType = vbLeftType.Replace("Boolean", "bool");
+            var csRightType = vbRightType.Replace("Boolean", "bool");
+            await TestConversionVisualBasicToCSharpAsync($@"Class TestClass
+    Private Sub Compare(left As Func(Of {vbLeftType}), right As {vbRightType})
+        Dim local = right
+        If left() {vbOperator} right Then Return
+        If (left() {vbOperator} local) Then Return
+    End Sub
+End Class", $@"using System;
+
+internal partial class TestClass
+{{
+    private void Compare(Func<{csLeftType}> left, {csRightType} right)
+    {{
+        {(csRightType == "bool?" ? "var" : csRightType)} local = right;
+        if (left(){leftTrueTest} {csOperator} right{rightTrueTest})
+            return;
+        if (left(){leftTrueTest} {csOperator} local{rightTrueTest})
+            return;
+    }}
+}}");
+        }
+
+        [Theory]
+        [InlineData("And", "&")]
+        [InlineData("Or", "|")]
+        public async Task EagerBooleanConditionRetainsObservableRightOperandAsync(string vbOperator, string csOperator)
+        {
+            await TestConversionVisualBasicToCSharpAsync($@"Class Holder
+    Public Overridable Property Value As Boolean
+End Class
+
+Class TestClass
+    Private Shared sharedValue As Boolean
+    Private enabled As Boolean
+
+    Private Sub Compare(left As Boolean, right As Func(Of Boolean), divisor As Integer, values As Boolean(), holder As Holder)
+        If left {vbOperator} right() Then Return
+        If left {vbOperator} (10 \ divisor = 0) Then Return
+        If left {vbOperator} holder.Value Then Return
+        If left {vbOperator} values(0) Then Return
+        If left {vbOperator} GetHolder().Value Then Return
+        If left {vbOperator} sharedValue Then Return
+        If left {vbOperator} enabled Then Return
+    End Sub
+
+    Private Function GetHolder() As Holder
+        Return Nothing
+    End Function
+End Class", $@"using System;
+
+internal partial class Holder
+{{
+    public virtual bool Value {{ get; set; }}
+}}
+
+internal partial class TestClass
+{{
+    private static bool sharedValue;
+    private bool enabled;
+
+    private void Compare(bool left, Func<bool> right, int divisor, bool[] values, Holder holder)
+    {{
+        if (left {csOperator} right())
+            return;
+        if (left {csOperator} 10 / divisor == 0)
+            return;
+        if (left {csOperator} holder.Value)
+            return;
+        if (left {csOperator} values[0])
+            return;
+        if (left {csOperator} GetHolder().Value)
+            return;
+        if (left {csOperator} sharedValue)
+            return;
+        if (left {csOperator} enabled)
+            return;
+    }}
+
+    private Holder GetHolder()
+    {{
+        return null;
+    }}
+}}");
+        }
+
+        [Theory]
+        [InlineData("And", "&")]
+        [InlineData("Or", "|")]
+        public async Task EagerNullableBooleanRetainsValueSensitiveContextsAsync(string vbOperator, string csOperator)
+        {
+            await TestConversionVisualBasicToCSharpAsync($@"Class TestClass
+    Private Function Compare(left As Boolean?, right As Boolean?) As Boolean?
+        If Not (left {vbOperator} right) Then Return Nothing
+        If (left {vbOperator} right) = False Then Return Nothing
+        Dim result As Boolean? = left {vbOperator} right
+        Return left {vbOperator} right
+    End Function
+End Class", $@"
+internal partial class TestClass
+{{
+    private bool? Compare(bool? left, bool? right)
+    {{
+        if ((left {csOperator} right) == false)
+            return default;
+        if ((left {csOperator} right) is {{ }} arg1 && arg1 == false)
+            return default;
+        var result = left {csOperator} right;
+        return left {csOperator} right;
+    }}
+}}");
+        }
+
+        [Fact]
+        public async Task EagerBooleanLiteralConditionsAsync()
+        {
+            await TestConversionVisualBasicToCSharpAsync(@"Class TestClass
+    Private Function Compare(left As Boolean?) As Integer
+        If (left And True) Then
+            Return 1
+        ElseIf (left Or False) Then
+            Return 2
+        End If
+        Return If(left And True, 3, 4)
+    End Function
+End Class", @"
+internal partial class TestClass
+{
+    private int Compare(bool? left)
+    {
+        if (left == true && true)
+        {
+            return 1;
+        }
+        else if (left == true || false)
+        {
+            return 2;
+        }
+        return left == true && true ? 3 : 4;
+    }
+}");
+        }
+
+        [Theory]
+        [InlineData("And", "&")]
+        [InlineData("Or", "|")]
+        public async Task EagerBooleanConditionRetainsUserDefinedConversionAsync(string vbOperator, string csOperator)
+        {
+            await TestConversionVisualBasicToCSharpAsync($@"Structure Flag
+    Public Enabled As Boolean
+
+    Public Shared Widening Operator CType(value As Flag) As Boolean
+        Return value.Enabled
+    End Operator
+End Structure
+
+Class TestClass
+    Private Sub Compare(left As Boolean, right As Flag)
+        If left {vbOperator} CBool(right) Then Return
+    End Sub
+End Class", $@"
+internal partial struct Flag
+{{
+    public bool Enabled;
+
+    public static implicit operator bool(Flag value)
+    {{
+        return value.Enabled;
+    }}
+}}
+
+internal partial class TestClass
+{{
+    private void Compare(bool left, Flag right)
+    {{
+        if (left {csOperator} (bool)right)
+            return;
+    }}
+}}");
+        }
+
+        [Theory]
+        [InlineData("And", "&")]
+        [InlineData("Or", "|")]
+        public async Task EagerBooleanConditionRetainsCustomOperatorAsync(string vbOperator, string csOperator)
+        {
+            await TestConversionVisualBasicToCSharpAsync($@"Structure Flag
+    Public Shared Operator {vbOperator}(left As Flag, right As Flag) As Boolean
+        Return True
+    End Operator
+End Structure
+
+Class TestClass
+    Private Sub Compare(left As Flag, right As Flag)
+        If left {vbOperator} right Then Return
+    End Sub
+End Class", $@"
+internal partial struct Flag
+{{
+    public static bool operator {csOperator}(Flag left, Flag right)
+    {{
+        return true;
+    }}
+}}
+
+internal partial class TestClass
+{{
+    private void Compare(Flag left, Flag right)
+    {{
+        if (left {csOperator} right)
+            return;
+    }}
+}}");
+        }
+
+        [Theory]
+        [InlineData("And", "&")]
+        [InlineData("Or", "|")]
+        public async Task EagerNumericConditionRetainsBitwiseOperatorAsync(string vbOperator, string csOperator)
+        {
+            await TestConversionVisualBasicToCSharpAsync($@"Class TestClass
+    Private Sub Compare(left As Integer, right As Integer)
+        If left {vbOperator} right Then Return
+    End Sub
+End Class", $@"using Microsoft.VisualBasic.CompilerServices; // Install-Package Microsoft.VisualBasic
+
+internal partial class TestClass
+{{
+    private void Compare(int left, int right)
+    {{
+        if (Conversions.ToBoolean(left {csOperator} right))
+            return;
+    }}
+}}");
+        }
+
         [Fact]
         public async Task AndOperatorOnNullableBooleanAsync()
         {
@@ -276,15 +523,15 @@ internal partial class TestClass
         bool? b = default;
         bool x = false;
 
-        if ((a & b) == true)
+        if (a == true && b == true)
             return;
         if (a == true && b == true)
             return;
-        if ((a & x) == true)
+        if (a == true && x)
             return;
         if (a == true && x)
             return;
-        if ((x & a) == true)
+        if (x && a == true)
             return;
         if (x && a == true)
             return;
@@ -333,15 +580,15 @@ internal partial class TestClass
         bool? b = default;
         bool x = false;
 
-        if ((a | b) == true)
+        if (a == true || b == true)
             return;
         if (a == true || b == true)
             return;
-        if ((a | x) == true)
+        if (a == true || x)
             return;
         if (a == true || x)
             return;
-        if ((x | a) == true)
+        if (x || a == true)
             return;
         if (x || a == true)
             return;

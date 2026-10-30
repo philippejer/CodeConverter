@@ -48,8 +48,21 @@ internal class VisualBasicNullableExpressionsConverter
 
     public ExpressionSyntax WithBinaryExpressionLogicForNullableTypes(VBSyntax.BinaryExpressionSyntax vbNode, TypeInfo lhsTypeInfo, TypeInfo rhsTypeInfo, BinaryExpressionSyntax csBinExp, ExpressionSyntax lhs, ExpressionSyntax rhs)
     {
-        if (IsWithinQuery ||
-            !IsSupported(vbNode.Kind()) || 
+        if (IsWithinQuery) return csBinExp;
+
+        if (vbNode.IsKind(VBasic.SyntaxKind.AndExpression, VBasic.SyntaxKind.OrExpression) &&
+            IsTrueObserved(vbNode) && IsBuiltInBooleanOperator(vbNode) &&
+            _semanticModel.GetOperation(vbNode) is IBinaryOperation operation &&
+            CanOmitEvaluation(operation.RightOperand)) {
+            var leftCondition = IsNullable(vbNode.Left, lhs, lhsTypeInfo) ? lhs.AddParens().EqualsTrue() : lhs;
+            var rightCondition = IsNullable(vbNode.Right, rhs, rhsTypeInfo) ? rhs.AddParens().EqualsTrue() : rhs;
+            var condition = vbNode.IsKind(VBasic.SyntaxKind.AndExpression)
+                ? leftCondition.And(rightCondition)
+                : leftCondition.Or(rightCondition);
+            return condition.WithAdditionalAnnotations(IsNotNullableAnnotation).AddParens();
+        }
+
+        if (!IsSupported(vbNode.Kind()) ||
             !lhsTypeInfo.ConvertedType.IsNullable() ||
             !rhsTypeInfo.ConvertedType.IsNullable()) {
             return csBinExp;
@@ -80,9 +93,11 @@ internal class VisualBasicNullableExpressionsConverter
         return ForRelationalOperators(vbNode, csBinExp, lhs, rhs, isLhsNullable, isRhsNullable).AddParens();
     }
 
+    public static bool IsKnownNonNullable(ExpressionSyntax expression) => expression.AnyInParens(node => node.HasAnnotation(IsNotNullableAnnotation));
+
     private bool IsNullable(VBSyntax.ExpressionSyntax vbNode, ExpressionSyntax csNode, TypeInfo typeInfo)
     {
-        return typeInfo.Type.IsNullable() && !csNode.AnyInParens(x => x.HasAnnotation(IsNotNullableAnnotation)) && GetNullabilityWithinBooleanExpression(vbNode) != KnownNullability.NotNull;
+        return typeInfo.Type.IsNullable() && !IsKnownNonNullable(csNode) && GetNullabilityWithinBooleanExpression(vbNode) != KnownNullability.NotNull;
     }
 
     private string GetArgName() => $"arg{Interlocked.Increment(ref _argCounter)}";
@@ -315,6 +330,20 @@ internal class VisualBasicNullableExpressionsConverter
         return _semanticModel.GetOperation(expression) is IBinaryOperation { OperatorMethod: null } operation &&
                (operation.Type.GetNullableUnderlyingType() ?? operation.Type)?.SpecialType == SpecialType.System_Boolean &&
                !HasUserDefinedConversion(operation.LeftOperand) && !HasUserDefinedConversion(operation.RightOperand);
+    }
+
+    private static bool CanOmitEvaluation(IOperation operation)
+    {
+        if ((operation.Type.GetNullableUnderlyingType() ?? operation.Type)?.SpecialType != SpecialType.System_Boolean) return false;
+
+        return operation switch {
+            ILocalReferenceOperation or IParameterReferenceOperation or ILiteralOperation => true,
+            IParenthesizedOperation parentheses => CanOmitEvaluation(parentheses.Operand),
+            IConversionOperation conversion when conversion.OperatorMethod == null &&
+                (conversion.Conversion.IsIdentity || conversion.Type.IsNullable() &&
+                    conversion.Operand.Type?.SpecialType == SpecialType.System_Boolean) => CanOmitEvaluation(conversion.Operand),
+            _ => false
+        };
     }
 
     private bool IsSafeToSkip(VBSyntax.ExpressionSyntax expression)
