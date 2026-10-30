@@ -278,15 +278,15 @@ internal partial class TestClass
 
         if ((a & b) == true)
             return;
-        if ((a.HasValue && !a.Value ? false : !b.HasValue ? null : b.Value ? a : false) == true)
+        if (a == true && b == true)
             return;
         if ((a & x) == true)
             return;
-        if ((!a.HasValue || a.Value) && x && a.HasValue)
+        if (a == true && x)
             return;
         if ((x & a) == true)
             return;
-        if (x && a.GetValueOrDefault())
+        if (x && a == true)
             return;
 
         var res = a & b;
@@ -335,15 +335,15 @@ internal partial class TestClass
 
         if ((a | b) == true)
             return;
-        if (a.GetValueOrDefault() || b.GetValueOrDefault())
+        if (a == true || b == true)
             return;
         if ((a | x) == true)
             return;
-        if (a.GetValueOrDefault() || x)
+        if (a == true || x)
             return;
         if ((x | a) == true)
             return;
-        if (x || a.GetValueOrDefault())
+        if (x || a == true)
             return;
 
         var res = a | b;
@@ -589,43 +589,245 @@ internal partial class TestClass
         int? y = default;
         int a = 0;
 
-        if (x.HasValue && y.HasValue && x.Value == y.Value)
+        if (x.HasValue && x == y)
             return;
-        if (x.HasValue && y.HasValue && x.Value != y.Value)
+        if (x.HasValue && y.HasValue && x != y)
             return;
-        if (x.HasValue && y.HasValue && x.Value > y.Value)
+        if (x > y)
             return;
-        if (x.HasValue && y.HasValue && x.Value >= y.Value)
+        if (x >= y)
             return;
-        if (x.HasValue && y.HasValue && x.Value < y.Value)
+        if (x < y)
             return;
-        if (x.HasValue && y.HasValue && x.Value <= y.Value)
-            return;
-
-        if (y.HasValue && a == y.Value)
-            return;
-        if (y.HasValue && a != y.Value)
-            return;
-        if (y.HasValue && a > y.Value)
-            return;
-        if (y.HasValue && a >= y.Value)
-            return;
-        if (y.HasValue && a < y.Value)
-            return;
-        if (y.HasValue && a <= y.Value)
+        if (x <= y)
             return;
 
-        if (x.HasValue && x.Value == a)
+        if (a == y)
             return;
-        if (x.HasValue && x.Value != a)
+        if (y.HasValue && a != y)
             return;
-        if (x.HasValue && x.Value > a)
+        if (a > y)
             return;
-        if (x.HasValue && x.Value >= a)
+        if (a >= y)
             return;
-        if (x.HasValue && x.Value < a)
+        if (a < y)
             return;
-        if (x.HasValue && x.Value <= a)
+        if (a <= y)
+            return;
+
+        if (x == a)
+            return;
+        if (x.HasValue && x != a)
+            return;
+        if (x > a)
+            return;
+        if (x >= a)
+            return;
+        if (x < a)
+            return;
+        if (x <= a)
+            return;
+    }
+}");
+        }
+
+        [Theory]
+        [InlineData("<")]
+        [InlineData("<=")]
+        [InlineData(">")]
+        [InlineData(">=")]
+        public async Task NullableOrderingConditionEvaluatesBothOperandsOnceAsync(string comparison)
+        {
+            await TestConversionVisualBasicToCSharpAsync(@"Class TestClass
+    Private Sub Compare(left As Func(Of Integer?), right As Func(Of Integer?))
+        If left() " + comparison + @" right() Then Return
+    End Sub
+End Class", @"using System;
+
+internal partial class TestClass
+{
+    private void Compare(Func<int?> left, Func<int?> right)
+    {
+        if (left() " + comparison + @" right())
+            return;
+    }
+}");
+        }
+
+        [Fact]
+        public async Task NullableEqualityConditionsRetainRequiredNullGuardsAsync()
+        {
+            await TestConversionVisualBasicToCSharpAsync(@"Class TestClass
+    Private Sub Compare(left As Integer?, right As Integer?)
+        If left = 0 Then Return
+        If 0 = right Then Return
+        If left = right Then Return
+        If left <> right Then Return
+    End Sub
+End Class", @"
+internal partial class TestClass
+{
+    private void Compare(int? left, int? right)
+    {
+        if (left == 0)
+            return;
+        if (0 == right)
+            return;
+        if (left.HasValue && left == right)
+            return;
+        if (left.HasValue && right.HasValue && left != right)
+            return;
+    }
+}");
+        }
+
+        [Fact]
+        public async Task NullableCompoundConditionsPreserveRequiredEvaluationAsync()
+        {
+            await TestConversionVisualBasicToCSharpAsync(@"Class TestClass
+    Private Sub Compare(left As Integer?, right As Integer?, gate As Func(Of Boolean?))
+        If ((left < right) OrElse gate()) Then Return
+        If gate() AndAlso left < right Then Return
+        If left < right AndAlso gate() Then Return
+    End Sub
+End Class", @"using System;
+
+internal partial class TestClass
+{
+    private void Compare(int? left, int? right, Func<bool?> gate)
+    {
+        if (left < right || gate() == true)
+            return;
+        if (gate() is var arg1 && arg1 != false && left < right && arg1 == true)
+            return;
+        if ((left.HasValue && right.HasValue ? left.Value < right.Value : (bool?)null) is var arg2 && arg2 != false && gate() == true && arg2 == true)
+            return;
+    }
+}");
+        }
+
+        [Fact]
+        public async Task NullableConditionSimplificationStopsAtValueSensitiveOperatorsAsync()
+        {
+            await TestConversionVisualBasicToCSharpAsync(@"Class TestClass
+    Private Sub Compare(left As Integer?, right As Integer?)
+        If Not (left < right) Then Return
+        If (left < right) = False Then Return
+        If (left < right) <> True Then Return
+        Dim result As Boolean? = left < right
+    End Sub
+End Class", @"
+internal partial class TestClass
+{
+    private void Compare(int? left, int? right)
+    {
+        if ((left.HasValue && right.HasValue ? left.Value < right.Value : null) == false)
+            return;
+        if ((left.HasValue && right.HasValue ? left.Value < right.Value : (bool?)null) is { } arg1 && arg1 == false)
+            return;
+        if ((left.HasValue && right.HasValue ? left.Value < right.Value : (bool?)null) is { } arg2 && arg2 != true)
+            return;
+        var result = left.HasValue && right.HasValue ? left.Value < right.Value : (bool?)null;
+    }
+}");
+        }
+
+        [Fact]
+        public async Task NullableAndAlsoCapturesLeftBeforeObservableRightAsync()
+        {
+            await TestConversionVisualBasicToCSharpAsync(@"Class TestClass
+    Private Sub Compare(ByRef flag As Boolean?, divisor As Integer)
+        If flag AndAlso Change(flag) Then Return
+        If flag AndAlso 10 \ divisor = 0 Then Return
+    End Sub
+
+    Private Function Change(ByRef flag As Boolean?) As Boolean
+        flag = Nothing
+        Return True
+    End Function
+End Class", @"
+internal partial class TestClass
+{
+    private void Compare(ref bool? flag, int divisor)
+    {
+        if (flag is var arg1 && arg1 != false && Change(ref flag) && arg1 == true)
+            return;
+        if (flag is var arg2 && arg2 != false && 10 / divisor == 0 && arg2 == true)
+            return;
+    }
+
+    private bool Change(ref bool? flag)
+    {
+        flag = default;
+        return true;
+    }
+}");
+        }
+
+        [Fact]
+        public async Task NullableOrderingConditionPreservesGetterReceiversAsync()
+        {
+            await TestConversionVisualBasicToCSharpAsync(@"Class Holder
+    Public Property Value As Integer?
+End Class
+
+Class TestClass
+    Private Sub Compare(left As Func(Of Holder), right As Func(Of Holder))
+        If left().Value < right().Value Then Return
+    End Sub
+End Class", @"using System;
+
+internal partial class Holder
+{
+    public int? Value { get; set; }
+}
+
+internal partial class TestClass
+{
+    private void Compare(Func<Holder> left, Func<Holder> right)
+    {
+        if (left().Value < right().Value)
+            return;
+    }
+}");
+        }
+
+        [Fact]
+        public async Task NullableUserDefinedOrderingRetainsExistingLoweringAsync()
+        {
+            await TestConversionVisualBasicToCSharpAsync(@"Structure CustomNumber
+    Public Shared Operator <(left As CustomNumber, right As CustomNumber) As Boolean
+        Return False
+    End Operator
+
+    Public Shared Operator >(left As CustomNumber, right As CustomNumber) As Boolean
+        Return False
+    End Operator
+End Structure
+
+Class TestClass
+    Private Sub Compare(left As CustomNumber?, right As CustomNumber?)
+        If left < right Then Return
+    End Sub
+End Class", @"
+internal partial struct CustomNumber
+{
+    public static bool operator <(CustomNumber left, CustomNumber right)
+    {
+        return false;
+    }
+
+    public static bool operator >(CustomNumber left, CustomNumber right)
+    {
+        return false;
+    }
+}
+
+internal partial class TestClass
+{
+    private void Compare(CustomNumber? left, CustomNumber? right)
+    {
+        if (left.HasValue && right.HasValue && left.Value < right.Value)
             return;
     }
 }");
@@ -713,7 +915,7 @@ internal partial class TestClass712
     {
         bool? var1 = default;
         bool? var2 = default;
-        if (var1.GetValueOrDefault() || (!var2).GetValueOrDefault())
+        if (var1 == true || !var2 == true)
             return true;
         else
             return false;

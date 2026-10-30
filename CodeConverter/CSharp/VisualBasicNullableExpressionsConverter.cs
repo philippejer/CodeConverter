@@ -1,6 +1,7 @@
 ﻿using ICSharpCode.CodeConverter.Util.FromRoslyn;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace ICSharpCode.CodeConverter.CSharp;
 #nullable enable
@@ -146,6 +147,20 @@ internal class VisualBasicNullableExpressionsConverter
         ExpressionSyntax lhs, ExpressionSyntax rhs,
         bool isLhsNullable, bool isRhsNullable)
     {
+        if (IsTrueObserved(vbNode) && IsBuiltInBooleanOperator(vbNode)) {
+            var rightCondition = isRhsNullable ? rhs.EqualsTrue() : rhs;
+            if (!isLhsNullable) {
+                return lhs.And(rightCondition).WithAdditionalAnnotations(IsNotNullableAnnotation);
+            }
+            if (IsSafeToSkip(vbNode.Right)) {
+                return lhs.EqualsTrue().And(rightCondition).WithAdditionalAnnotations(IsNotNullableAnnotation);
+            }
+
+            var capture = PatternVar(lhs, out var savedLeft);
+            return capture.And(savedLeft.Bin(ValidSyntaxFactory.FalseExpression, SyntaxKind.NotEqualsExpression))
+                .And(rightCondition).And(savedLeft.EqualsTrue()).WithAdditionalAnnotations(IsNotNullableAnnotation);
+        }
+
         var lhsPattern = PatternVar(vbNode.Left, lhs, out var lhsName);
 
         if (vbNode.AlwaysHasBooleanTypeInCSharp()) {
@@ -177,6 +192,12 @@ internal class VisualBasicNullableExpressionsConverter
     private ExpressionSyntax ForOrElseOperator(VBSyntax.BinaryExpressionSyntax vbNode,
         ExpressionSyntax lhs, ExpressionSyntax rhs, bool isLhsNullable, bool isRhsNullable)
     {
+        if (IsTrueObserved(vbNode) && IsBuiltInBooleanOperator(vbNode)) {
+            var leftCondition = isLhsNullable ? lhs.EqualsTrue() : lhs;
+            var rightCondition = isRhsNullable ? rhs.EqualsTrue() : rhs;
+            return leftCondition.Or(rightCondition).WithAdditionalAnnotations(IsNotNullableAnnotation);
+        }
+
         if (vbNode.AlwaysHasBooleanTypeInCSharp()) {
             if (!isLhsNullable) {
                 return lhs.Or(rhs.GetValueOrDefault());
@@ -205,6 +226,22 @@ internal class VisualBasicNullableExpressionsConverter
         BinaryExpressionSyntax csNode, ExpressionSyntax lhs, ExpressionSyntax rhs,
         bool isLhsNullable, bool isRhsNullable)
     {
+        if (IsTrueObserved(vbNode) && IsBuiltInNumericComparison(vbNode)) {
+            if (vbNode.IsKind(VBasic.SyntaxKind.LessThanExpression, VBasic.SyntaxKind.LessThanOrEqualExpression,
+                    VBasic.SyntaxKind.GreaterThanExpression, VBasic.SyntaxKind.GreaterThanOrEqualExpression) ||
+                vbNode.IsKind(VBasic.SyntaxKind.EqualsExpression) &&
+                (IsNonNullableNumeric(vbNode.Left) || IsNonNullableNumeric(vbNode.Right))) {
+                return csNode.WithAdditionalAnnotations(IsNotNullableAnnotation);
+            }
+            if (IsStableNumericRead(vbNode.Left) && IsStableNumericRead(vbNode.Right)) {
+                var condition = isLhsNullable ? lhs.NullableHasValueExpression() : rhs.NullableHasValueExpression();
+                if (vbNode.IsKind(VBasic.SyntaxKind.NotEqualsExpression) && isLhsNullable && isRhsNullable) {
+                    condition = condition.And(rhs.NullableHasValueExpression());
+                }
+                return condition.And(csNode).WithAdditionalAnnotations(IsNotNullableAnnotation);
+            }
+        }
+
         ExpressionSyntax? lhsName = lhs, rhsName = rhs;
         var lhsReusable = IsSafelyReusable(vbNode.Left);
         var rhsReusable = IsSafelyReusable(vbNode.Right);
@@ -240,6 +277,71 @@ internal class VisualBasicNullableExpressionsConverter
         }
 
         return notNullCondition is null ? bin : notNullCondition.Conditional(bin, Null);
+    }
+
+    private bool IsBuiltInNumericComparison(VBSyntax.BinaryExpressionSyntax expression)
+    {
+        if (_semanticModel.GetOperation(expression) is not IBinaryOperation { OperatorMethod: null } operation) return false;
+        if (HasUserDefinedConversion(operation.LeftOperand) || HasUserDefinedConversion(operation.RightOperand)) return false;
+        var leftType = operation.LeftOperand.Type.GetNullableUnderlyingType() ?? operation.LeftOperand.Type;
+        var rightType = operation.RightOperand.Type.GetNullableUnderlyingType() ?? operation.RightOperand.Type;
+        return leftType.IsNumericType() && SymbolEqualityComparer.Default.Equals(leftType, rightType);
+    }
+
+    private static bool HasUserDefinedConversion(IOperation operation)
+    {
+        while (operation is IConversionOperation conversion) {
+            if (conversion.OperatorMethod != null) return true;
+            operation = conversion.Operand;
+        }
+        return false;
+    }
+
+    private bool IsNonNullableNumeric(VBSyntax.ExpressionSyntax expression)
+    {
+        var type = _semanticModel.GetTypeInfo(expression).Type;
+        return !type.IsNullable() && type.IsNumericType();
+    }
+
+    private bool IsStableNumericRead(VBSyntax.ExpressionSyntax expression)
+    {
+        var operation = _semanticModel.GetOperation(expression.SkipIntoParens());
+        var type = operation?.Type.GetNullableUnderlyingType() ?? operation?.Type;
+        return type.IsNumericType() && operation is ILocalReferenceOperation or IParameterReferenceOperation or ILiteralOperation;
+    }
+
+    private bool IsBuiltInBooleanOperator(VBSyntax.BinaryExpressionSyntax expression)
+    {
+        return _semanticModel.GetOperation(expression) is IBinaryOperation { OperatorMethod: null } operation &&
+               (operation.Type.GetNullableUnderlyingType() ?? operation.Type)?.SpecialType == SpecialType.System_Boolean &&
+               !HasUserDefinedConversion(operation.LeftOperand) && !HasUserDefinedConversion(operation.RightOperand);
+    }
+
+    private bool IsSafeToSkip(VBSyntax.ExpressionSyntax expression)
+    {
+        var operation = _semanticModel.GetOperation(expression.SkipIntoParens());
+        var type = operation?.Type.GetNullableUnderlyingType() ?? operation?.Type;
+        return type?.SpecialType == SpecialType.System_Boolean &&
+               operation is ILocalReferenceOperation or IParameterReferenceOperation or ILiteralOperation;
+    }
+
+    private bool IsTrueObserved(VBSyntax.ExpressionSyntax expression)
+    {
+        while (expression.Parent is VBSyntax.ParenthesizedExpressionSyntax parentheses) {
+            expression = parentheses;
+        }
+
+        if (expression.Parent is VBSyntax.BinaryExpressionSyntax parent && IsBuiltInBooleanOperator(parent)) {
+            if (parent.IsKind(VBasic.SyntaxKind.OrElseExpression) ||
+                parent.IsKind(VBasic.SyntaxKind.AndAlsoExpression) && (parent.Right == expression || IsSafeToSkip(parent.Right))) {
+                return IsTrueObserved(parent);
+            }
+        }
+
+        return expression.Parent is VBSyntax.SingleLineIfStatementSyntax singleLine && singleLine.Condition == expression ||
+               expression.Parent is VBSyntax.IfStatementSyntax ifStatement && ifStatement.Condition == expression ||
+               expression.Parent is VBSyntax.ElseIfStatementSyntax elseIfStatement && elseIfStatement.Condition == expression ||
+               expression.Parent is VBSyntax.TernaryConditionalExpressionSyntax ternary && ternary.Condition == expression;
     }
 
     private ExpressionSyntax HasValue(VBasic.Syntax.ExpressionSyntax vbNode, ref ExpressionSyntax csName) => HasValue(IsSafelyReusable(vbNode), ref csName);
