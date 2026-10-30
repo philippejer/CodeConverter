@@ -1,4 +1,4 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Xunit;
 
 namespace ICSharpCode.CodeConverter.Tests.VB;
@@ -28,7 +28,8 @@ Public Module MathEx
     Public Sub Neg(ByRef num As Integer)
         num = -num
     End Sub
-End Module", @"
+End Module", @"using static MathEx;
+
 public partial class ExtensionMethodsRefPropertyParameter
 {
     public int Number { get; set; } = 3;
@@ -41,7 +42,7 @@ public partial class ExtensionMethodsRefPropertyParameter
     public void WithMethod()
     {
         int argnum = Number;
-        MathEx.Neg(ref argnum);
+        Neg(ref argnum);
         Number = argnum;
     }
 }

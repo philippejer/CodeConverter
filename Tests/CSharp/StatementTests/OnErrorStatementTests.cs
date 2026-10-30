@@ -18,7 +18,7 @@ ErrorHandler:
     Return Err.Number = 6
 End Function
 End Class", @"using System;
-using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
+using static Microsoft.VisualBasic.Information; // Install-Package Microsoft.VisualBasic
 
 internal partial class TestClass
 {
@@ -32,7 +32,7 @@ internal partial class TestClass
         catch
         {
 
-            return Information.Err().Number == 6;
+            return Err().Number == 6;
         }
     }
 }");

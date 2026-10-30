@@ -104,10 +104,17 @@ internal class DeclarationNodeVisitor : VBasic.VisualBasicSyntaxVisitor<Task<CSh
             
         var usings = await importsClauses
             .SelectAsync(async c => await c.AcceptAsync<UsingDirectiveSyntax>(TriviaConvertingDeclarationVisitor));
+        var implicitModuleImports = node.GetAnnotatedNodes(AnnotationConstants.ImplicitModuleMemberAnnotation)
+            .Select(n => _semanticModel.GetSymbolInfo(n).Symbol?.ContainingType)
+            .Where(t => t?.IsModuleType() == true)
+            .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
+            .Select(t => ValidSyntaxFactory.UsingDirective(CS.SyntaxFactory.Token(CS.SyntaxKind.StaticKeyword), null,
+                (NameSyntax)CommonConversions.GetTypeSyntax(t)));
         var usingDirectiveSyntax = usings
+            .Concat(implicitModuleImports)
             .Concat(_extraUsingDirectives.Select(u => CS.SyntaxFactory.UsingDirective(CS.SyntaxFactory.ParseName(u))))
             .OrderByDescending(IsSystemUsing).ThenBy(u => u.Name.ToString().Replace("global::", "")).ThenByDescending(HasSourceMapAnnotations)
-            .GroupBy(u => (Name: u.Name.ToString(), Alias: u.Alias))
+            .GroupBy(u => (Name: u.Name.ToString().Replace("global::", ""), Alias: u.Alias, Static: u.StaticKeyword.RawKind))
             .Select(g => g.First())
             .Concat(xmlImportHelperClassDeclarationOrNull.YieldNotNull().Select(_ => CS.SyntaxFactory.UsingDirective(CS.SyntaxFactory.NameEquals(XmlImportContext.HelperClassShortIdentifierName), _xmlImportContext.HelperClassUniqueIdentifierName)));
 

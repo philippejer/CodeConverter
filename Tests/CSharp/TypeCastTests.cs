@@ -17,12 +17,13 @@ public class TypeCastTests : ConverterTestBase
     End Sub
 End Class" + Environment.NewLine, @"using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
 using Microsoft.VisualBasic.CompilerServices; // Install-Package Microsoft.VisualBasic
+using static Microsoft.VisualBasic.Interaction; // Install-Package Microsoft.VisualBasic
 
 public partial class NumericStringToEnum
 {
     public static void Main()
     {
-        Interaction.MsgBox(nameof(Main), (MsgBoxStyle)Conversions.ToInteger(""1""), true);
+        MsgBox(nameof(Main), (MsgBoxStyle)Conversions.ToInteger(""1""), true);
     }
 }" + Environment.NewLine);
     }

@@ -513,6 +513,158 @@ internal partial class TestClass
 }");
     }
 
+    [Theory]
+    [InlineData("", null)]
+    [InlineData("Imports TestNamespace.TestModule\r\n", null)]
+    [InlineData("", "Root")]
+    public async Task ImplicitModuleMemberUsesStaticImportAsync(string imports, string rootNamespace)
+    {
+        await new ConverterTestBase(rootNamespace).TestConversionVisualBasicToCSharpAsync(imports + @"Namespace TestNamespace
+    Public Module TestModule
+        Public Sub ModuleFunction()
+        End Sub
+    End Module
+
+    Class TestClass
+        Public Sub TestMethod()
+            ModuleFunction()
+        End Sub
+    End Class
+End Namespace", @"using static TestNamespace.TestModule;
+
+namespace TestNamespace
+{
+    public static partial class TestModule
+    {
+        public static void ModuleFunction()
+        {
+        }
+    }
+
+    internal partial class TestClass
+    {
+        public void TestMethod()
+        {
+            ModuleFunction();
+        }
+    }
+}".Replace("TestNamespace", rootNamespace == null ? "TestNamespace" : rootNamespace + ".TestNamespace"));
+    }
+
+    [Fact]
+    public async Task ImplicitModuleMembersSupportEscapedNamesAndGenericMethodsAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Namespace TestNamespace
+    Public Module [Module]
+        Public Value As Integer
+        Public Property Enabled As Boolean
+
+        Public Function Identity(Of T)(value As T) As T
+            Return value
+        End Function
+    End Module
+
+    Class Consumer
+        Public Sub Run()
+            Value = Identity(Of Integer)(1)
+            Enabled = True
+        End Sub
+    End Class
+End Namespace", @"using static TestNamespace.Module;
+
+namespace TestNamespace
+{
+    public static partial class Module
+    {
+        public static int Value;
+        public static bool Enabled { get; set; }
+
+        public static T Identity<T>(T value)
+        {
+            return value;
+        }
+    }
+
+    internal partial class Consumer
+    {
+        public void Run()
+        {
+            Value = Identity(1);
+            Enabled = true;
+        }
+    }
+}");
+    }
+
+    [Fact]
+    public async Task ConflictingImplicitModuleMembersRemainQualifiedAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Namespace FirstNamespace
+    Public Module FirstModule
+        Public Function GetValue() As Integer
+            Return 1
+        End Function
+    End Module
+
+    Class FirstConsumer
+        Public Function Run() As Integer
+            Return GetValue()
+        End Function
+    End Class
+End Namespace
+
+Namespace SecondNamespace
+    Public Module SecondModule
+        Public Function GetValue() As Integer
+            Return 2
+        End Function
+    End Module
+
+    Class SecondConsumer
+        Public Function Run() As Integer
+            Return GetValue()
+        End Function
+    End Class
+End Namespace", @"
+namespace FirstNamespace
+{
+    public static partial class FirstModule
+    {
+        public static int GetValue()
+        {
+            return 1;
+        }
+    }
+
+    internal partial class FirstConsumer
+    {
+        public int Run()
+        {
+            return FirstModule.GetValue();
+        }
+    }
+}
+
+namespace SecondNamespace
+{
+    public static partial class SecondModule
+    {
+        public static int GetValue()
+        {
+            return 2;
+        }
+    }
+
+    internal partial class SecondConsumer
+    {
+        public int Run()
+        {
+            return SecondModule.GetValue();
+        }
+    }
+}");
+    }
+
     [Fact]
     public async Task TypePromotedModuleIsQualifiedAsync()
     {
@@ -617,7 +769,8 @@ Public Class TestIssue479
   End Sub
 End Class",
             @"using System;
-using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
+using static Microsoft.VisualBasic.Constants; // Install-Package Microsoft.VisualBasic
+using static Microsoft.VisualBasic.Strings; // Install-Package Microsoft.VisualBasic
 
 public partial class Issue479
 {
@@ -625,7 +778,7 @@ public partial class Issue479
     {
         get
         {
-            return 32768 + Strings.AscW(s);
+            return 32768 + AscW(s);
         }
     }
 }
@@ -635,7 +788,7 @@ public partial class TestIssue479
     public void compareAccess()
     {
         var hD = new Issue479();
-        Console.WriteLine(""Traditional access returns "" + hD[""X""] + Constants.vbCrLf + ""Default property access returns "" + hD[""X""] + Constants.vbCrLf + ""Dictionary access returns "" + hD[""X""]);
+        Console.WriteLine(""Traditional access returns "" + hD[""X""] + vbCrLf + ""Default property access returns "" + hD[""X""] + vbCrLf + ""Dictionary access returns "" + hD[""X""]);
     }
 }");
     }

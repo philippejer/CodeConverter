@@ -13,6 +13,7 @@ internal static class AnnotationConstants
     public const string LeadingTriviaAlreadyMappedAnnotation = nameof(CodeConverter) + "." + nameof(LeadingTriviaAlreadyMappedAnnotation);
     public const string TrailingTriviaAlreadyMappedAnnotation = nameof(CodeConverter) + "." + nameof(TrailingTriviaAlreadyMappedAnnotation);
     public const string ParentPropertyAccessorKindAnnotation = nameof(CodeConverter) + "." + nameof(ParentPropertyAccessorKindAnnotation);
+    public const string ImplicitModuleMemberAnnotation = "CodeConverter.ImplicitModuleMember";
 
     private static string AsString(LinePosition position)
     {
