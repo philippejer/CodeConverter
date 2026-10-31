@@ -52,5 +52,12 @@ public class ConversionResult
     {
         Directory.CreateDirectory(Path.GetDirectoryName(TargetPathOrNull));
         File.WriteAllText(TargetPathOrNull, ConvertedCode ?? GetExceptionsAsString(), Encoding.UTF8);
+        if (Success && SourcePathOrNull != null &&
+            ((string.Equals(Path.GetExtension(SourcePathOrNull), ".vb", StringComparison.OrdinalIgnoreCase) &&
+              string.Equals(Path.GetExtension(TargetPathOrNull), ".cs", StringComparison.OrdinalIgnoreCase)) ||
+             (string.Equals(Path.GetExtension(SourcePathOrNull), ".vbproj", StringComparison.OrdinalIgnoreCase) &&
+              string.Equals(Path.GetExtension(TargetPathOrNull), ".csproj", StringComparison.OrdinalIgnoreCase)))) {
+            File.Delete(SourcePathOrNull);
+        }
     }
 }
