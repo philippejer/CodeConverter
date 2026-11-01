@@ -6,6 +6,13 @@ namespace ICSharpCode.CodeConverter.Tests.CSharp.MemberTests;
 
 public class MemberTests : ConverterTestBase
 {
+    [Theory]
+    [InlineData("Public Delegate Sub Callback", "public delegate void Callback();")]
+    [InlineData("Public Delegate Function Provider As Integer", "public delegate int Provider();")]
+    public async Task TestDelegateWithoutParenthesesAsync(string visualBasic, string csharp)
+    {
+        await TestConversionVisualBasicToCSharpAsync(visualBasic, csharp);
+    }
 
     [Fact]
     public async Task TestFieldAsync()

@@ -496,7 +496,7 @@ internal class DeclarationNodeVisitor : VBasic.VisualBasicSyntaxVisitor<Task<CSh
             CS.SyntaxFactory.List(attributes), CommonConversions.ConvertModifiers(node, node.Modifiers),
             returnType, CommonConversions.ConvertIdentifier(node.Identifier),
             typeParameters,
-            await node.ParameterList.AcceptAsync<ParameterListSyntax>(_triviaConvertingExpressionVisitor),
+            await node.ParameterList.AcceptAsync<ParameterListSyntax>(_triviaConvertingExpressionVisitor) ?? CS.SyntaxFactory.ParameterList(),
             constraints
         );
     }

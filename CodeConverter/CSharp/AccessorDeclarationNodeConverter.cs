@@ -274,7 +274,8 @@ internal class AccessorDeclarationNodeConverter
 
         async Task<CSSyntax.MethodDeclarationSyntax> CreateMethodDeclarationSyntax(VBSyntax.ParameterListSyntax containingPropParameterList, bool voidReturn)
         {
-            var parameterListSyntax = await containingPropParameterList.AcceptAsync<CSSyntax.ParameterListSyntax>(CommonConversions.TriviaConvertingExpressionVisitor, sourceMap);
+            var parameterListSyntax = await containingPropParameterList.AcceptAsync<CSSyntax.ParameterListSyntax>(CommonConversions.TriviaConvertingExpressionVisitor, sourceMap)
+                                      ?? CS.SyntaxFactory.ParameterList();
 
             CSSyntax.MethodDeclarationSyntax methodDeclarationSyntax = CS.SyntaxFactory.MethodDeclaration(attributes, modifiers,
                 voidReturn ? CS.SyntaxFactory.PredefinedType(CS.SyntaxFactory.Token(CS.SyntaxKind.VoidKeyword)) : returnType,

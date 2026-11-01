@@ -6,6 +6,36 @@ namespace ICSharpCode.CodeConverter.Tests.CSharp.MemberTests;
 
 public class EventMemberTests : ConverterTestBase
 {
+    [Fact]
+    public async Task TestCustomEventRaiseAccessorWithoutParenthesesAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Public Class TestClass
+    Public Custom Event Changed As System.Action
+        AddHandler(value As System.Action)
+        End AddHandler
+        RemoveHandler(value As System.Action)
+        End RemoveHandler
+        RaiseEvent
+        End RaiseEvent
+    End Event
+End Class", @"using System;
+
+public partial class TestClass
+{
+    public event Action Changed
+    {
+        add
+        {
+        }
+        remove
+        {
+        }
+    }
+    void OnChanged()
+    {
+    }
+}", incompatibleWithAutomatedCommentTesting: true);
+    }
 
     [Fact]
     public async Task TestEventAsync()
