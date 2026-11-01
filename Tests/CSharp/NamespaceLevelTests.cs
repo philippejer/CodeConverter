@@ -501,6 +501,28 @@ End Class",
 ");
     }
 
+    [Theory]
+    [InlineData("MyBase.New(value)", "value")]
+    [InlineData("MyBase.new(value)", "value")]
+    [InlineData("MyBase.nEw(value)", "value")]
+    [InlineData("MyBase.New", "")]
+    [InlineData("MyBase.new", "")]
+    [InlineData("MyBase.nEw", "")]
+    public async Task BaseConstructorCallIsCaseInsensitiveAsync(string baseCall, string argument)
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Public Class DataSet1
+    Inherits Global.System.Data.DataSet
+    Public Sub New(value As String)
+        " + baseCall + @"
+    End Sub
+End Class", @"public partial class DataSet1 : System.Data.DataSet
+{
+    public DataSet1(string value) : base(" + argument + @")
+    {
+    }
+}");
+    }
+
     [Fact]
     public async Task MultilineDocCommentAsync()
     {

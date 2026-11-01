@@ -23,7 +23,7 @@ internal static class SyntaxTokenExtensions
 
     public static bool HasMatchingText(this SyntaxToken token, Microsoft.CodeAnalysis.VisualBasic.SyntaxKind kind)
     {
-        return token.ToString() == VBasic.SyntaxFacts.GetText(kind);
+        return string.Equals(token.ToString(), VBasic.SyntaxFacts.GetText(kind), StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsKind(this SyntaxToken token, SyntaxKind kind1, SyntaxKind kind2)
