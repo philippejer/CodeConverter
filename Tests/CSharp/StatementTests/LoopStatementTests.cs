@@ -11,6 +11,32 @@ namespace ICSharpCode.CodeConverter.Tests.CSharp.StatementTests;
 /// </summary>
 public class LoopStatementTests : ConverterTestBase
 {
+    [Theory]
+    [InlineData("currentDate <= endDate")]
+    [InlineData("(currentDate <= endDate)")]
+    public async Task WhileNullableDateComparisonAsync(string condition)
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Imports System
+
+Class TestClass
+    Sub TestMethod(startDate As Date?, endDate As Date?)
+        Dim currentDate = startDate
+        While " + condition + @"
+            currentDate = currentDate.Value.AddMinutes(1)
+        End While
+    End Sub
+End Class", @"using System;
+
+internal partial class TestClass
+{
+    public void TestMethod(DateTime? startDate, DateTime? endDate)
+    {
+        var currentDate = startDate;
+        while (currentDate.HasValue && endDate.HasValue && currentDate.Value <= endDate.Value)
+            currentDate = currentDate.Value.AddMinutes(1d);
+    }
+}");
+    }
 
     [Fact]
     public async Task UntilStatementAsync()

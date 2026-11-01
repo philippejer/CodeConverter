@@ -22,11 +22,16 @@ internal static class VbSyntaxNodeExtensions
 
     public static bool AlwaysHasBooleanTypeInCSharp(this VBSyntax.ExpressionSyntax vbNode)
     {
-        var parent = vbNode.SkipOutOfParens()?.Parent;
+        while (vbNode?.Parent is VBSyntax.ParenthesizedExpressionSyntax parenthesized) {
+            vbNode = parenthesized;
+        }
+
+        var parent = vbNode?.Parent;
 
         return parent is VBSyntax.SingleLineIfStatementSyntax singleLine && singleLine.Condition == vbNode ||
                parent is VBSyntax.IfStatementSyntax ifStatement && ifStatement.Condition == vbNode ||
                parent is VBSyntax.ElseIfStatementSyntax elseIfStatement && elseIfStatement.Condition == vbNode ||
+               parent is VBSyntax.WhileStatementSyntax whileStatement && whileStatement.Condition == vbNode ||
                parent is VBSyntax.TernaryConditionalExpressionSyntax ternary && ternary.Condition == vbNode ||
                parent is VBSyntax.WhereClauseSyntax;
     }
