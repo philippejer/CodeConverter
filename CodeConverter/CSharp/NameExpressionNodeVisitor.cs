@@ -320,7 +320,40 @@ internal class NameExpressionNodeVisitor
         if (invocationSymbol is IMethodSymbol m && convertedExpression is LambdaExpressionSyntax) {
             convertedExpression = SyntaxFactory.ObjectCreationExpression(CommonConversions.GetFuncTypeSyntax(expressionType, m), ExpressionSyntaxExtensions.CreateArgList(convertedExpression), null);
         }
+
+        // Preserve VB's receiver-first type inference when contravariance could change C# inference.
+        // https://devblogs.microsoft.com/vbteam/extension-methods-and-generics-extension-methods-part-5/
+        if (invocationSymbol is IMethodSymbol { ReducedFrom.IsGenericMethod: true } reducedMethod &&
+            convertedExpression is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax methodName } memberAccess &&
+            operation is IInvocationOperation invocationOperation &&
+            invocationOperation.Arguments.Any(HasContravariantArgumentConversion)) {
+            var remainingTypeArguments = reducedMethod.TypeParameters
+                .Zip(reducedMethod.TypeArguments, (parameter, argument) => (parameter.Name, argument))
+                .ToDictionary(pair => pair.Name, pair => pair.argument);
+            var typeArguments = reducedMethod.ReducedFrom.TypeParameters
+                .Select(parameter => reducedMethod.GetTypeInferredDuringReduction(parameter) ?? remainingTypeArguments[parameter.Name])
+                .ToArray();
+            if (typeArguments.All(type => !type.ContainsAnonymousType())) {
+                var genericName = SyntaxFactory.GenericName(methodName.Identifier,
+                    SyntaxFactory.TypeArgumentList(SyntaxFactory.SeparatedList(typeArguments.Select(type => CommonConversions.GetTypeSyntax(type)))));
+                convertedExpression = memberAccess.WithName(genericName);
+            }
+        }
+
         return SyntaxFactory.InvocationExpression(convertedExpression, convertedArgumentList);
+    }
+
+    private static bool HasContravariantArgumentConversion(IArgumentOperation argument)
+    {
+        if (argument.Value is not IConversionOperation { Operand.Type: INamedTypeSymbol sourceType, Type: INamedTypeSymbol targetType }) {
+            return false;
+        }
+
+        return sourceType.AllInterfaces.Prepend(sourceType).Any(sourceInterface =>
+            SymbolEqualityComparer.Default.Equals(sourceInterface.OriginalDefinition, targetType.OriginalDefinition) &&
+            targetType.OriginalDefinition.TypeParameters.Where((parameter, index) =>
+                parameter.Variance == VarianceKind.In &&
+                !SymbolEqualityComparer.Default.Equals(sourceInterface.TypeArguments[index], targetType.TypeArguments[index])).Any());
     }
 
     private async Task<(ExpressionSyntax, bool isElementAccess)> ConvertInvocationSubExpressionAsync(VBSyntax.InvocationExpressionSyntax node,

@@ -7,6 +7,63 @@ namespace ICSharpCode.CodeConverter.Tests.CSharp.ExpressionTests;
 public class LinqExpressionTests : ConverterTestBase
 {
     [Fact]
+    public async Task DistinctWithBaseTypeComparerPreservesDerivedElementsAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Imports System.Collections.Generic
+Imports System.Linq
+
+Public Class BaseValue
+    Public Property Key As Integer
+End Class
+
+Public Class DerivedValue
+    Inherits BaseValue
+End Class
+
+Public Module Helpers
+    Public Function ToDictionary(values As IEnumerable(Of DerivedValue)) As Dictionary(Of Integer, DerivedValue)
+        Return values.Distinct(EqualityComparer(Of BaseValue).Default).ToDictionary(Function(value) value.Key)
+    End Function
+
+    Public Function ToDictionaryWithComparer(values As IEnumerable(Of DerivedValue), comparer As IEqualityComparer(Of BaseValue)) As Dictionary(Of Integer, DerivedValue)
+        Return values.Distinct(comparer).ToDictionary(Function(value) value.Key)
+    End Function
+
+    Public Function ToGenericDictionary(Of TValue As BaseValue)(values As IEnumerable(Of TValue), comparer As IEqualityComparer(Of BaseValue)) As Dictionary(Of Integer, TValue)
+        Return values.Distinct(comparer).ToDictionary(Function(value) value.Key)
+    End Function
+End Module", @"using System.Collections.Generic;
+using System.Linq;
+
+public partial class BaseValue
+{
+    public int Key { get; set; }
+}
+
+public partial class DerivedValue : BaseValue
+{
+}
+
+public static partial class Helpers
+{
+    public static Dictionary<int, DerivedValue> ToDictionary(IEnumerable<DerivedValue> values)
+    {
+        return values.Distinct<DerivedValue>(EqualityComparer<BaseValue>.Default).ToDictionary(value => value.Key);
+    }
+
+    public static Dictionary<int, DerivedValue> ToDictionaryWithComparer(IEnumerable<DerivedValue> values, IEqualityComparer<BaseValue> comparer)
+    {
+        return values.Distinct<DerivedValue>(comparer).ToDictionary(value => value.Key);
+    }
+
+    public static Dictionary<int, TValue> ToGenericDictionary<TValue>(IEnumerable<TValue> values, IEqualityComparer<BaseValue> comparer) where TValue : BaseValue
+    {
+        return values.Distinct<TValue>(comparer).ToDictionary(value => value.Key);
+    }
+}");
+    }
+
+    [Fact]
     public async Task Issue895_LinqWhereAfterGroupAsync()
     {
         await TestConversionVisualBasicToCSharpAsync(@"
