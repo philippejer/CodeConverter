@@ -421,6 +421,39 @@ internal abstract partial class TestClass
     }
 
     [Fact]
+    public async Task TestAbstractAsyncMethodAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(
+            @"Imports System.Threading.Tasks
+
+MustInherit Class TestClass
+    Public MustOverride Async Function TestMethod() As Task
+End Class
+
+Class ChildClass
+    Inherits TestClass
+
+    Public Overrides Async Function TestMethod() As Task
+        Await Task.Delay(1)
+    End Function
+End Class", @"using System.Threading.Tasks;
+
+internal abstract partial class TestClass
+{
+    public abstract Task TestMethod();
+}
+
+internal partial class ChildClass : TestClass
+{
+
+    public override async Task TestMethod()
+    {
+        await Task.Delay(1);
+    }
+}");
+    }
+
+    [Fact]
     public async Task TestAbstractReadOnlyAndWriteOnlyPropertyAsync()
     {
         await TestConversionVisualBasicToCSharpAsync(

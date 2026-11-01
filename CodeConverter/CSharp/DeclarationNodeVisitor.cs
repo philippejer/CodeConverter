@@ -776,6 +776,9 @@ internal class DeclarationNodeVisitor : VBasic.VisualBasicSyntaxVisitor<Task<CSh
         var declaredSymbol = (IMethodSymbol)_semanticModel.GetDeclaredSymbol(node);
         var extraCsModifierKinds = declaredSymbol?.IsExtern == true ? new[] { CS.SyntaxKind.ExternKeyword } : Array.Empty<CS.SyntaxKind>();
         var convertedModifiers = CommonConversions.ConvertModifiers(node, node.Modifiers, tokenContext, extraCsModifierKinds: extraCsModifierKinds);
+        if (!hasBody) {
+            convertedModifiers = convertedModifiers.RemoveWhere(modifier => modifier.IsKind(CS.SyntaxKind.AsyncKeyword));
+        }
 
         bool accessedThroughMyClass = _accessorDeclarationNodeConverter.IsAccessedThroughMyClass(node, node.Identifier, declaredSymbol);
 
