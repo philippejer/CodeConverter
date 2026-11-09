@@ -34,7 +34,14 @@ internal static class VisualBasicModuleReferenceUpdater
                         throw new InvalidOperationException($"Cannot resolve module reference '{name}' in '{document.FilePath}'.");
                     }
                     var symbol = symbolInfo.Symbol;
-                    if (!symbol.IsModuleMember() || symbol is IMethodSymbol { MethodKind: MethodKind.ReducedExtension }) continue;
+                    var reducedMethod = symbol as IMethodSymbol;
+                    var extensionMethod = reducedMethod?.ReducedFrom;
+                    bool requiresStaticInvocation = extensionMethod != null && !extensionMethod.Parameters[0].ValidCSharpExtensionMethodParameter();
+                    if (extensionMethod != null) {
+                        if (!requiresStaticInvocation) continue;
+                        symbol = extensionMethod;
+                    }
+                    if (!symbol.IsModuleMember()) continue;
                     var containingProject = solution.GetProject(symbol.ContainingAssembly, cancellationToken);
                     if (containingProject == null && convertedAssemblies.Contains(symbol.ContainingAssembly.Identity)) {
                         throw new InvalidOperationException($"Cannot determine the project for module reference '{name}' in '{document.FilePath}'.");
@@ -48,11 +55,11 @@ internal static class VisualBasicModuleReferenceUpdater
                     }
 
                     SyntaxNode nodeToReplace = name;
-                    if (name.Parent is VBSyntax.MemberAccessExpressionSyntax memberAccess && memberAccess.Name == name) {
+                    if (!requiresStaticInvocation && name.Parent is VBSyntax.MemberAccessExpressionSyntax memberAccess && memberAccess.Name == name) {
                         if (memberAccess.Expression == null || semanticModel.GetSymbolInfo(memberAccess.Expression, cancellationToken).Symbol is not INamespaceSymbol) continue;
                         nodeToReplace = memberAccess;
                     }
-                    if (name.Parent is VBSyntax.QualifiedNameSyntax qualifiedAccess && qualifiedAccess.Right == name) {
+                    if (!requiresStaticInvocation && name.Parent is VBSyntax.QualifiedNameSyntax qualifiedAccess && qualifiedAccess.Right == name) {
                         if (semanticModel.GetSymbolInfo(qualifiedAccess.Left, cancellationToken).Symbol is not INamespaceSymbol) continue;
                         nodeToReplace = qualifiedAccess;
                     }
@@ -65,6 +72,23 @@ internal static class VisualBasicModuleReferenceUpdater
 
                     var moduleName = Microsoft.CodeAnalysis.VisualBasic.SymbolDisplay.ToDisplayString(symbol.ContainingType,
                         SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers));
+                    if (requiresStaticInvocation) {
+                        if (name.Parent is not VBSyntax.MemberAccessExpressionSyntax extensionAccess || extensionAccess.Expression == null ||
+                            extensionAccess.Parent is not VBSyntax.InvocationExpressionSyntax invocation || invocation.Expression != extensionAccess ||
+                            invocation.ArgumentList == null || extensionAccess.DescendantTrivia().Any(trivia => trivia.SpanStart >= extensionAccess.SpanStart &&
+                                trivia.Span.End <= extensionAccess.Span.End && !trivia.IsKind(SyntaxKind.WhitespaceTrivia) && !trivia.IsKind(SyntaxKind.EndOfLineTrivia))) {
+                            throw new InvalidOperationException($"Cannot safely rewrite extension reference '{name}' in '{document.FilePath}'.");
+                        }
+
+                        var invocationAnnotation = new SyntaxAnnotation();
+                        var methodAccess = SyntaxFactory.SimpleMemberAccessExpression(SyntaxFactory.ParseExpression(moduleName), name.WithoutTrivia())
+                            .WithAdditionalAnnotations(invocationAnnotation);
+                        var arguments = invocation.ArgumentList.Arguments.Insert(0, SyntaxFactory.SimpleArgument(extensionAccess.Expression.WithoutTrivia()));
+                        var rewrittenInvocation = invocation.WithExpression(methodAccess).WithArgumentList(invocation.ArgumentList.WithArguments(arguments))
+                            .WithTriviaFrom(invocation);
+                        replacements[invocation] = (rewrittenInvocation, invocationAnnotation, symbol);
+                        continue;
+                    }
                     SyntaxNode qualifiedName = symbol is INamedTypeSymbol
                         ? SyntaxFactory.QualifiedName(SyntaxFactory.ParseName(moduleName), name.WithoutTrivia())
                         : SyntaxFactory.SimpleMemberAccessExpression(SyntaxFactory.ParseExpression(moduleName), name.WithoutTrivia());
@@ -82,9 +106,14 @@ internal static class VisualBasicModuleReferenceUpdater
                     var attachedRoot = await newDocument.GetSyntaxRootAsync(cancellationToken);
                     foreach (var replacement in replacements.Values) {
                         var rewrittenNode = attachedRoot.GetAnnotatedNodes(replacement.Annotation).Single();
-                        var rewrittenSymbol = newSemanticModel?.GetSymbolInfo(rewrittenNode, cancellationToken).Symbol;
+                        var rewrittenInfo = newSemanticModel?.GetSymbolInfo(rewrittenNode, cancellationToken);
+                        var rewrittenSymbol = rewrittenInfo?.Symbol;
                         if (!SymbolEqualityComparer.Default.Equals(replacement.Symbol, rewrittenSymbol)) {
-                            throw new InvalidOperationException($"Qualification changes the binding of module reference '{rewrittenNode}' in '{document.FilePath}'.");
+                            var candidates = rewrittenInfo?.CandidateSymbols.Select(candidate => $"{candidate.ToDisplayString()} [{candidate.ContainingAssembly?.Identity}]") ?? Enumerable.Empty<string>();
+                            throw new InvalidOperationException($"Qualification changes the binding of module reference '{rewrittenNode}' in '{document.FilePath}'. " +
+                                $"Original: {replacement.Symbol.ToDisplayString()} [{replacement.Symbol.ContainingAssembly?.Identity}]; " +
+                                $"rewritten: {rewrittenSymbol?.ToDisplayString() ?? "<unresolved>"} [{rewrittenSymbol?.ContainingAssembly?.Identity}]; " +
+                                $"candidate reason: {rewrittenInfo?.CandidateReason}; candidates: {string.Join(", ", candidates)}.");
                         }
                     }
                 }
