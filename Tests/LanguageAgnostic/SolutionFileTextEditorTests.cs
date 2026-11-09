@@ -288,6 +288,45 @@ public class SolutionFileTextEditorTests : IDisposable
     }
 
     [Fact]
+    public async Task Convert_WhenSdkStyleProjectReferencesNestedProjectByRelativePathThenUpdatedAsync()
+    {
+        var targetProject = AddTestProject("RCE-DSL", Path.Combine("src", "DAL", "Rce-DSL"));
+        var referencingProjects = new List<(Project Project, string ReferencePath)>();
+        foreach (var (name, directory, referencePath) in new[] {
+                     ("RCE-DAL", Path.Combine("src", "DAL", "Rce-DAL"), Path.Combine("..", "Rce-DSL", "RCE-DSL.vbproj")),
+                     ("Priceur.Web", Path.Combine("src", "Priceur.Web"), Path.Combine("..", "DAL", "Rce-DSL", "RCE-DSL.vbproj"))
+                 }) {
+            var referencingProject = AddTestProject(name, directory);
+            _sln = _sln.WithProjectReferences(referencingProject.Id, new[] { new ProjectReference(targetProject.Id) });
+            referencingProjects.Add((_sln.GetProject(referencingProject.Id), referencePath));
+        }
+        targetProject = _sln.GetProject(targetProject.Id);
+
+        var projectContentsByPath = referencingProjects.ToDictionary(
+            entry => entry.Project.FilePath,
+            entry => GetProjectProjectReference(new[] { entry.ReferencePath }));
+        _fsMock.Setup(mock => mock.File.ReadAllText(It.IsAny<string>()))
+            .Returns((string path) => projectContentsByPath.TryGetValue(path, out var contents) ? contents : "<Project />");
+
+        var solutionContents = GetSolutionProjectReference(new[] {
+            ("F184B08F-C81C-45F6-A57F-5ABD9991F28F", Path.Combine("src", "DAL", "Rce-DSL", "RCE-DSL.vbproj"), "EBFF5BED-EA57-45C0-8BD5-A7D059C1E45B")
+        });
+        var slnConverter = SolutionConverter.CreateFor<VBToCSConversion>(new List<Project> { targetProject },
+            fileSystem: _fsMock.Object, solutionContents: solutionContents);
+
+        var conversionResults = new List<ConversionResult>();
+        await foreach (var result in slnConverter.ConvertAsync()) conversionResults.Add(result);
+        foreach (var (referencingProject, referencePath) in referencingProjects) {
+            var convertedProject = conversionResults.SingleOrDefault(result => result.SourcePathOrNull == referencingProject.FilePath);
+            var expectedProject = GetProjectProjectReference(new[] {
+                Path.ChangeExtension(referencePath, ".csproj")
+            });
+            Assert.NotNull(convertedProject);
+            Assert.Equal(expectedProject, Utils.HomogenizeEol(convertedProject.ConvertedCode));
+        }
+    }
+
+    [Fact]
     public async Task Convert_WhenReferencedByProjFileInSameFolderThenUpdatedAsync()
     {
         //Arrange

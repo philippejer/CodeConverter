@@ -1,4 +1,5 @@
 ﻿using System.IO.Abstractions;
+using System.Text.RegularExpressions;
 
 namespace ICSharpCode.CodeConverter.Common;
 
@@ -89,9 +90,35 @@ public class SolutionConverter
 
     private IAsyncEnumerable<ConversionResult> ConvertProjectAsync(Project project)
     {
-        var replacements = _projectReferenceReplacements.ToArray();
+        var replacements = _projectReferenceReplacements
+            .Concat(GetProjectReferenceReplacements(project))
+            .ToArray();
         _progress.Report(new ConversionProgress($"Begin converting {project.Name} at {DateTime.Now:HH:mm:ss}..."));
         return ProjectConversion.ConvertProjectAsync(project, _languageConversion, _textReplacementConverter, _progress, _cancellationToken, replacements);
+    }
+
+    private IEnumerable<(string Find, string Replace, bool FirstOnly)> GetProjectReferenceReplacements(Project referencingProject)
+    {
+        if (referencingProject.FilePath == null) yield break;
+
+        var convertedProjectsById = _projectsToConvert.ToDictionary(project => project.Id);
+        foreach (var projectReference in referencingProject.ProjectReferences) {
+            if (!convertedProjectsById.TryGetValue(projectReference.ProjectId, out var referencedProject) || referencedProject.FilePath == null) {
+                continue;
+            }
+
+            var relativePath = PathConverter.GetRelativePath(referencingProject.FilePath, referencedProject.FilePath);
+            var pathVariants = new[] {
+                relativePath,
+                relativePath.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                relativePath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            }.Distinct(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var pathVariant in pathVariants) {
+                yield return ($"(?<=[\"']){Regex.Escape(pathVariant)}(?=[\"'])",
+                    PathConverter.TogglePathExtension(pathVariant), false);
+            }
+        }
     }
 
     private IEnumerable<ConversionResult> UpdateProjectReferences(IEnumerable<Project> projectsToUpdateReferencesOnly)
@@ -100,9 +127,11 @@ public class SolutionConverter
             .Where(p => p.FilePath != null) //Some project types like Websites don't have a project file
             .Select(project => {
                 var fileInfo = new FileInfo(project.FilePath);
+                var replacements = _projectReferenceReplacements
+                    .Concat(GetProjectReferenceReplacements(project));
 
                 var withReferencesReplaced = 
-                    _textReplacementConverter.ConversionResultFromReplacements(fileInfo, _projectReferenceReplacements);
+                    _textReplacementConverter.ConversionResultFromReplacements(fileInfo, replacements);
                 withReferencesReplaced.TargetPathOrNull = withReferencesReplaced.SourcePathOrNull;
 
                 return withReferencesReplaced;
