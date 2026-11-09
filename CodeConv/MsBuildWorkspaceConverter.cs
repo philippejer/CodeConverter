@@ -37,6 +37,12 @@ public sealed class MsBuildWorkspaceConverter
 
     public async IAsyncEnumerable<ConversionResult> ConvertProjectsWhereAsync(Func<Project, bool> shouldConvertProject, Language? targetLanguage, IProgress<ConversionProgress> progress, [EnumeratorCancellation] CancellationToken token)
     {
+        var converter = await CreateSolutionConverterAsync(shouldConvertProject, targetLanguage, progress, token);
+        await foreach (var result in converter.ConvertAsync().WithCancellation(token)) yield return result;
+    }
+
+    public async Task<SolutionConverter> CreateSolutionConverterAsync(Func<Project, bool> shouldConvertProject, Language? targetLanguage, IProgress<ConversionProgress> progress, CancellationToken token)
+    {
         var strProgress = new Progress<string>(s => progress.Report(new ConversionProgress(s)));
         _cachedSolution ??= new AsyncLazy<Solution>(async () => await _solutionLoader.AnalyzeSolutionAsync(strProgress), _joinableTaskFactory);
 
@@ -53,8 +59,7 @@ public sealed class MsBuildWorkspaceConverter
             : LanguageNames.CSharp;
 
         var projectsToConvert = solution.Projects.Where(p => p.Language == languageNameToConvert && shouldConvertProject(p)).ToArray();
-        var results = SolutionConverter.CreateFor(languageConversion, projectsToConvert, progress, token).ConvertAsync();
-        await foreach (var r in results.WithCancellation(token)) yield return r;
+        return SolutionConverter.CreateFor(languageConversion, projectsToConvert, progress, token);
     }
 
     private class SolutionLoader

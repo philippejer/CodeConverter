@@ -16,7 +16,8 @@ public static class ConversionResultWriter
     {
         var solutionFile = new FileInfo(solutionFilePath);
         var solutionFileDirectory = solutionFile.Directory ?? throw new InvalidOperationException("Solution file directory could not be found");
-        var sourceAndTargetSame = string.Equals(solutionFileDirectory.FullName, targetDirectory.FullName, StringComparison.Ordinal);
+        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var sourceAndTargetSame = string.Equals(solutionFileDirectory.FullName.TrimEnd(Path.DirectorySeparatorChar), targetDirectory.FullName.TrimEnd(Path.DirectorySeparatorChar), pathComparison);
 
         if (!sourceAndTargetSame) {
             if (wipeTargetDirectory) {
@@ -43,22 +44,36 @@ public static class ConversionResultWriter
             sourcePaths.Add(Path.GetFullPath(conversionResult.SourcePathOrNull));
             targetPaths.Add(Path.GetFullPath(conversionResult.TargetPathOrNull));
             cancellationToken.ThrowIfCancellationRequested();
-            var targetFilePath =
-                conversionResult.TargetPathOrNull.Replace(solutionFileDirectory.FullName, targetDirectory.FullName);
+            var targetFilePath = GetTargetPath(conversionResult.TargetPathOrNull);
             var directory = Path.GetDirectoryName(targetFilePath);
             if (directory != null) {
                 Directory.CreateDirectory(directory);
             }
 
-            File.WriteAllText(targetFilePath, conversionResult.ConvertedCode);
+            if (conversionResult.OutputEncoding == null) {
+                File.WriteAllText(targetFilePath, conversionResult.ConvertedCode);
+            } else {
+                File.WriteAllText(targetFilePath, conversionResult.ConvertedCode, conversionResult.OutputEncoding);
+            }
         }
 
         if (!sourceAndTargetSame) {
             var filePathsToRemove = sourcePaths.Except(targetPaths);
             foreach (var filePathToRemove in filePathsToRemove) {
-                string pathInTargetDir = filePathToRemove.Replace(solutionFileDirectory.FullName, targetDirectory.FullName);
+                string pathInTargetDir = GetTargetPath(filePathToRemove);
                 if (File.Exists(pathInTargetDir)) File.Delete(pathInTargetDir);
             }
+        }
+
+        string GetTargetPath(string sourcePath)
+        {
+            if (sourceAndTargetSame) return sourcePath;
+            var relativePath = Path.GetRelativePath(solutionFileDirectory.FullName, sourcePath);
+            if (Path.IsPathRooted(relativePath) || relativePath == ".." ||
+                relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)) {
+                throw new InvalidOperationException($"Cannot write a file outside the solution directory to the output directory: {sourcePath}");
+            }
+            return Path.Combine(targetDirectory.FullName, relativePath);
         }
     }
 }

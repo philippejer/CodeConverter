@@ -97,6 +97,20 @@ internal static class VisualStudioInteraction
         return window;
     }
 
+    public static async Task<IReadOnlyCollection<string>> GetUnsavedDocumentsAsync(IEnumerable<string> paths)
+    {
+        var affectedPaths = new HashSet<string>(paths.Select(Path.GetFullPath), StringComparer.OrdinalIgnoreCase);
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(_cancelAllToken);
+        var unsavedPaths = new List<string>();
+        foreach (Document document in Dte.Documents) {
+            if (!document.Saved && !string.IsNullOrEmpty(document.FullName) && affectedPaths.Contains(Path.GetFullPath(document.FullName))) {
+                unsavedPaths.Add(document.FullName);
+            }
+        }
+        await TaskScheduler.Default;
+        return unsavedPaths;
+    }
+
     public static async Task SelectAllAsync(this Window window)
     {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(_cancelAllToken);

@@ -10,6 +10,7 @@ public class ConversionResult
     public bool Success => ConvertedCode != null;
     public string ConvertedCode { get; private set; }
     public IReadOnlyList<string> Exceptions { get; internal set; }
+    public Encoding OutputEncoding { get; set; }
     internal bool IsIdentity { get; set; }
 
     public string SourcePathOrNull {
@@ -51,7 +52,7 @@ public class ConversionResult
     public void WriteToFile()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(TargetPathOrNull));
-        File.WriteAllText(TargetPathOrNull, ConvertedCode ?? GetExceptionsAsString(), Encoding.UTF8);
+        File.WriteAllText(TargetPathOrNull, ConvertedCode ?? GetExceptionsAsString(), OutputEncoding ?? Encoding.UTF8);
         if (Success && SourcePathOrNull != null &&
             ((string.Equals(Path.GetExtension(SourcePathOrNull), ".vb", StringComparison.OrdinalIgnoreCase) &&
               string.Equals(Path.GetExtension(TargetPathOrNull), ".cs", StringComparison.OrdinalIgnoreCase)) ||

@@ -1,5 +1,6 @@
 ﻿using System.IO.Abstractions;
 using System.Text.RegularExpressions;
+using ICSharpCode.CodeConverter.CSharp;
 
 namespace ICSharpCode.CodeConverter.Common;
 
@@ -13,6 +14,7 @@ public class SolutionConverter
     private readonly ILanguageConversion _languageConversion;
     private readonly CancellationToken _cancellationToken;
     private readonly TextReplacementConverter _textReplacementConverter;
+    private Task<ConversionResult[]> _preparedVisualBasicDocuments;
 
     public static SolutionConverter CreateFor<TLanguageConversion>(IReadOnlyCollection<Project> projectsToConvert,
         ConversionOptions conversionOptions = default,
@@ -69,14 +71,26 @@ public class SolutionConverter
         _textReplacementConverter = new TextReplacementConverter(fileSystem);
     }
 
+    public Task<ConversionResult[]> PrepareAsync()
+    {
+        return _preparedVisualBasicDocuments ??= _languageConversion is VBToCSConversion
+            ? VisualBasicModuleReferenceUpdater.UpdateAsync(_projectsToConvert, _languageConversion.ConversionOptions, _cancellationToken)
+            : Task.FromResult(Array.Empty<ConversionResult>());
+    }
+
     public async IAsyncEnumerable<ConversionResult> ConvertAsync()
     {
         var projectsToUpdateReferencesOnly = _projectsToConvert.First().Solution.Projects.Except(_projectsToConvert);
+        var updatedVisualBasicDocuments = await PrepareAsync();
 
         foreach (var project in _projectsToConvert) {
             await foreach (var result in ConvertProjectAsync(project).WithCancellation(_cancellationToken)) {
                 yield return result;
             }
+        }
+
+        foreach (var result in updatedVisualBasicDocuments) {
+            yield return result;
         }
 
         foreach (var result in UpdateProjectReferences(projectsToUpdateReferencesOnly)) {

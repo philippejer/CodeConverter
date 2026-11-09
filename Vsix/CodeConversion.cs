@@ -56,6 +56,8 @@ internal class CodeConversion
     public async Task ConvertProjectsAsync<TLanguageConversion>(IReadOnlyCollection<Project> selectedProjects, CancellationToken cancellationToken) where TLanguageConversion : ILanguageConversion, new()
     {
         try {
+            var preliminaryConverter = await CreateSolutionConverterAsync<TLanguageConversion>(selectedProjects, cancellationToken);
+            await EnsureAffectedDocumentsSavedAsync(preliminaryConverter);
             await EnsureBuiltAsync(selectedProjects);
             await _joinableTaskFactory.RunAsync(async () => {
                 var convertedFiles = ConvertProjectUnhandledAsync<TLanguageConversion>(selectedProjects, cancellationToken);
@@ -135,7 +137,7 @@ internal class CodeConversion
         await foreach (var convertedFile in convertedFiles) {
             if (convertedFile.SourcePathOrNull == null) continue;
 
-            if (WillOverwriteSource(convertedFile)) {
+            if (convertedFile.Success && WillOverwriteSource(convertedFile)) {
                 filesToOverwrite.Add(convertedFile);
                 continue;
             }
@@ -196,11 +198,10 @@ internal class CodeConversion
         var maxExamples = 30; // Avoid a huge unreadable dialog going off the screen
         var exampleText = pathsToOverwrite.Count > maxExamples ? $". First {maxExamples} examples" : "";
         await _outputWindow.WriteToOutputWindowAsync(Environment.NewLine + "Awaiting user confirmation for overwrite....", forceShow: true);
-        bool shouldOverwrite = await VisualStudioInteraction.ShowMessageBoxAsync("Overwrite solution and referencing projects?",
-            $@"The current solution file and any referencing projects will be overwritten to reference the new project(s){exampleText}:
+        bool shouldOverwrite = await VisualStudioInteraction.ShowMessageBoxAsync("Overwrite solution, projects and source files?",
+            $@"The following solution, project and source files will be overwritten{exampleText}:
 * {string.Join(Environment.NewLine + "* ", pathsToOverwrite.Take(maxExamples))}
 
-The old contents will be copied to 'currentFilename.bak'.
 Please 'Reload All' when Visual Studio prompts you.", true, files.Count > errors.Count);
         await _outputWindow.WriteToOutputWindowAsync(shouldOverwrite ? "confirmed" : "declined");
         return shouldOverwrite;
@@ -301,6 +302,15 @@ Please 'Reload All' when Visual Studio prompts you.", true, files.Count > errors
     private async IAsyncEnumerable<ConversionResult> ConvertProjectUnhandledAsync<TLanguageConversion>(IReadOnlyCollection<Project> selectedProjects, [EnumeratorCancellation] CancellationToken cancellationToken)
         where TLanguageConversion : ILanguageConversion, new()
     {
+        var solutionConverter = await CreateSolutionConverterAsync<TLanguageConversion>(selectedProjects, cancellationToken);
+        await EnsureAffectedDocumentsSavedAsync(solutionConverter);
+
+        await foreach (var result in solutionConverter.ConvertAsync()) yield return result;
+    }
+
+    private async Task<SolutionConverter> CreateSolutionConverterAsync<TLanguageConversion>(IReadOnlyCollection<Project> selectedProjects, CancellationToken cancellationToken)
+        where TLanguageConversion : ILanguageConversion, new()
+    {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
         if (selectedProjects.Count > 1) {
             await _outputWindow.WriteToOutputWindowAsync($"Converting {selectedProjects.Count} projects...", true, true);
@@ -314,9 +324,16 @@ Please 'Reload All' when Visual Studio prompts you.", true, files.Count > errors
         await TaskScheduler.Default;
 
         var conversionOptions = new ConversionOptions {AbandonOptionalTasksAfter = await GetAbandonOptionalTasksAfterAsync()};
-        var solutionConverter = SolutionConverter.CreateFor<TLanguageConversion>(projects, conversionOptions: conversionOptions, progress: CreateOutputWindowProgress(), cancellationToken: cancellationToken);
+        return SolutionConverter.CreateFor<TLanguageConversion>(projects, conversionOptions: conversionOptions, progress: CreateOutputWindowProgress(), cancellationToken: cancellationToken);
+    }
 
-        await foreach (var result in solutionConverter.ConvertAsync()) yield return result;
+    private static async Task EnsureAffectedDocumentsSavedAsync(SolutionConverter solutionConverter)
+    {
+        var updatedDocuments = await solutionConverter.PrepareAsync();
+        var unsavedDocuments = await VisualStudioInteraction.GetUnsavedDocumentsAsync(updatedDocuments.Select(result => result.SourcePathOrNull));
+        if (unsavedDocuments.Count > 0) {
+            throw new InvalidOperationException("Save the following VB files before converting the project:" + Environment.NewLine + string.Join(Environment.NewLine, unsavedDocuments));
+        }
     }
 
     private async Task<TimeSpan> GetAbandonOptionalTasksAfterAsync() => TimeSpan.FromMinutes((await GetOptions()).FormattingTimeout);

@@ -124,8 +124,20 @@ public partial class CodeConvProgram
         var joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
         var msbuildWorkspaceConverter = new MsBuildWorkspaceConverter(joinableTaskFactory, finalSolutionPath, BestEffort, properties);
 
-        var converterResultsEnumerable = msbuildWorkspaceConverter.ConvertProjectsWhereAsync(ShouldIncludeProject, TargetLanguage, progress, cancellationToken);
-        await ConversionResultWriter.WriteConvertedAsync(converterResultsEnumerable, finalSolutionPath, outputDirectory, Force, true, strProgress, cancellationToken);
+        var converter = await msbuildWorkspaceConverter.CreateSolutionConverterAsync(ShouldIncludeProject, TargetLanguage, progress, cancellationToken);
+        var updatedDocuments = await converter.PrepareAsync();
+        var solutionDirectory = Path.GetFullPath(Path.GetDirectoryName(finalSolutionPath) ?? throw new InvalidOperationException("Solution directory could not be determined"));
+        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!string.Equals(solutionDirectory.TrimEnd(Path.DirectorySeparatorChar), outputDirectory.FullName.TrimEnd(Path.DirectorySeparatorChar), pathComparison)) {
+            var externalDocument = updatedDocuments.FirstOrDefault(result => {
+                var relativePath = Path.GetRelativePath(solutionDirectory, result.SourcePathOrNull);
+                return Path.IsPathRooted(relativePath) || relativePath == ".." || relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+            });
+            if (externalDocument != null) {
+                throw new ValidationException($"Cannot safely copy linked VB document outside the solution directory: {externalDocument.SourcePathOrNull}");
+            }
+        }
+        await ConversionResultWriter.WriteConvertedAsync(converter.ConvertAsync(), finalSolutionPath, outputDirectory, Force, true, strProgress, cancellationToken);
     }
 
     private static async Task<bool> CouldOverwriteUncommittedFilesAsync(DirectoryInfo outputDirectory)
