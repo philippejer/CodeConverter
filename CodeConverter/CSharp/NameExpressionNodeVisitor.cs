@@ -706,7 +706,7 @@ internal class NameExpressionNodeVisitor
             var constValue = _semanticModel.GetConstantValue(vbArg);
             if (IsCultureInvariant(constValue)) {
                 var csArg = await vbArg.AcceptAsync<ExpressionSyntax>(TriviaConvertingExpressionVisitor);
-                cSharpSyntaxNode = CommonConversions.TypeConversionAnalyzer.AddExplicitConversion(node, csArg, true, true, true, forceTargetType: _semanticModel.GetTypeInfo(node).Type);
+                cSharpSyntaxNode = CommonConversions.TypeConversionAnalyzer.AddExplicitConversion(vbArg, csArg, true, true, true, forceTargetType: _semanticModel.GetTypeInfo(node).Type);
             }
         }
 

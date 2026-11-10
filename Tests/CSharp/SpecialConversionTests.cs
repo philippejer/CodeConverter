@@ -299,6 +299,32 @@ internal partial class TestConversions
     }
 
     [Fact]
+    public async Task TestCharacterConversionsWithConstantInvocationArgumentsAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"
+Class TestConversions
+    Sub Test()
+        Dim column = Chr(Asc(""A""))
+        While column <> Chr(Asc(""L""))
+            column = Chr(Asc(column) + 1)
+        End While
+        Dim wideColumn = ChrW(AscW(""A""))
+    End Sub
+End Class", @"using Microsoft.VisualBasic; // Install-Package Microsoft.VisualBasic
+
+internal partial class TestConversions
+{
+    public void Test()
+    {
+        char column = (char)Strings.Asc(""A"");
+        while (column != (char)Strings.Asc(""L""))
+            column = Strings.Chr(Strings.Asc(column) + 1);
+        char wideColumn = (char)Strings.AscW(""A"");
+    }
+}");
+    }
+
+    [Fact]
     public async Task TestNonVisualBasicChrMethodConversionsAsync()
     {
         await TestConversionVisualBasicToCSharpAsync(@"
