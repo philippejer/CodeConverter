@@ -106,6 +106,20 @@ internal class AccessorDeclarationNodeConverter
             accessors = ConvertSimpleAccessors(isWriteOnly, isReadonly, allowPrivateAccessorForDirectAccess, propSymbol.DeclaredAccessibility);
         }
 
+        if (RequiresExplicitOverrideBackingField(propSymbol)) {
+            var fieldIdentifier = CommonConversions.CsEscapedIdentifier("_" + propSymbol.Name);
+            var field = CS.SyntaxFactory.FieldDeclaration(
+                    CS.SyntaxFactory.VariableDeclaration(rawType)
+                        .AddVariables(CS.SyntaxFactory.VariableDeclarator(fieldIdentifier).WithInitializer(initializer)))
+                .AddModifiers(CS.SyntaxFactory.Token(CS.SyntaxKind.PrivateKeyword));
+            additionalDeclarations.Add(field);
+            var getter = CS.SyntaxFactory.AccessorDeclaration(CS.SyntaxKind.GetAccessorDeclaration)
+                .WithExpressionBody(CS.SyntaxFactory.ArrowExpressionClause(CS.SyntaxFactory.IdentifierName(fieldIdentifier)))
+                .WithSemicolonToken(SemicolonToken);
+            accessors = CS.SyntaxFactory.AccessorList(CS.SyntaxFactory.SingletonList(getter));
+            initializer = null;
+        }
+
         if (isIndexer) {
             if (accessedThroughMyClass) {
                 // Not sure if this is possible
@@ -437,6 +451,10 @@ internal class AccessorDeclarationNodeConverter
 
     private static string SetMethodId(string methodName) => $"set_{methodName}";
     private static string GetMethodId(string methodName) => $"get_{methodName}";
+
+    internal static bool RequiresExplicitOverrideBackingField(IPropertySymbol property) =>
+        property is { IsReadOnly: true, OverriddenProperty.IsAbstract: false, Parameters.IsEmpty: true } &&
+        property.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is VBSyntax.PropertyStatementSyntax { Parent: not VBSyntax.PropertyBlockSyntax };
 
     public static bool ShouldConvertAsParameterizedProperty(VBSyntax.PropertyStatementSyntax propStmt)
     {

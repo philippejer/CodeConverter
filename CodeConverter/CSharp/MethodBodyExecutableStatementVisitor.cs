@@ -211,6 +211,12 @@ internal class MethodBodyExecutableStatementVisitor : VBasic.VisualBasicSyntaxVi
         var lhs = await node.Left.AcceptAsync<ExpressionSyntax>(_expressionVisitor);
         var lOperation = _semanticModel.GetOperation(node.Left);
 
+        if (lOperation is IPropertyReferenceOperation propertyReference &&
+            AccessorDeclarationNodeConverter.RequiresExplicitOverrideBackingField(propertyReference.Property)) {
+            var fieldName = SyntaxFactory.IdentifierName(CommonConversions.CsEscapedIdentifier("_" + propertyReference.Property.Name));
+            lhs = lhs is MemberAccessExpressionSyntax memberAccess ? memberAccess.WithName(fieldName) : fieldName;
+        }
+
         var (parameterizedPropertyAccessMethod, _) = await CommonConversions.GetParameterizedPropertyAccessMethodAsync(lOperation);
 
         // If it's a simple assignment, we can return early as it's already handled by ConvertInvocationExpression

@@ -60,7 +60,13 @@ internal class NameExpressionNodeVisitor
                 left = CommonConversions.GetTypeSyntax(typeInfo.Type);
             } else {
                 left = SyntaxFactory.ThisExpression();
-                if (nodeSymbol.IsVirtual && !nodeSymbol.IsAbstract ||
+                if (nodeSymbol is IPropertySymbol property && AccessorDeclarationNodeConverter.RequiresExplicitOverrideBackingField(property)) {
+                    if (SymbolEqualityComparer.Default.Equals(property.ContainingType, _semanticModel.GetEnclosingSymbol(node.SpanStart)?.ContainingType)) {
+                        simpleNameSyntax = SyntaxFactory.IdentifierName(CommonConversions.CsEscapedIdentifier("_" + property.Name));
+                    } else {
+                        left = SyntaxFactory.BaseExpression();
+                    }
+                } else if (nodeSymbol.IsVirtual && !nodeSymbol.IsAbstract ||
                     nodeSymbol.IsImplicitlyDeclared && nodeSymbol is IFieldSymbol { AssociatedSymbol: IPropertySymbol { IsVirtual: true, IsAbstract: false } }) {
                     simpleNameSyntax =
                         ValidSyntaxFactory.IdentifierName(

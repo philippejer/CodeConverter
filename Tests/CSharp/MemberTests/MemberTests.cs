@@ -454,6 +454,132 @@ internal partial class ChildClass : TestClass
     }
 
     [Fact]
+    public async Task ReadOnlyAutoPropertyOverrideOfConcretePropertyAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(
+            @"Class BaseClass
+    Protected Overridable ReadOnly Property Value As Integer = 1
+End Class
+
+Class ChildClass
+    Inherits BaseClass
+    Protected Overrides ReadOnly Property Value As Integer = 2
+End Class", @"
+internal partial class BaseClass
+{
+    protected virtual int Value { get; private set; } = 1;
+}
+
+internal partial class ChildClass : BaseClass
+{
+    protected override int Value { get => _Value; }
+
+    private int _Value = 2;
+}");
+    }
+
+    [Fact]
+    public async Task ReadOnlyAutoPropertyOverrideConstructorAndBackingFieldAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(
+            @"Class BaseClass
+    Protected Overridable ReadOnly Property Value As Integer
+End Class
+
+Class ChildClass
+    Inherits BaseClass
+    Protected Overrides ReadOnly Property vAlue As Integer
+
+    Public Sub New()
+        Value = 3
+        Me.Value = 4
+        _vAlue = 5
+    End Sub
+End Class", @"
+internal partial class BaseClass
+{
+    protected virtual int Value { get; private set; }
+}
+
+internal partial class ChildClass : BaseClass
+{
+    protected override int Value { get => _vAlue; }
+
+    private int _vAlue;
+
+    public ChildClass()
+    {
+        _vAlue = 3;
+        _vAlue = 4;
+        _vAlue = 5;
+    }
+}");
+    }
+
+    [Fact]
+    public async Task ReadOnlyAutoPropertyOverrideMyClassAndFurtherOverrideAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(
+            @"Class BaseClass
+    Protected Overridable ReadOnly Property Value As Integer = 1
+End Class
+
+Class ChildClass
+    Inherits BaseClass
+    Protected Overrides ReadOnly Property Value As Integer = 2
+
+    Public Function ReadOwnValue() As Integer
+        Return MyClass.Value + _Value
+    End Function
+End Class
+
+Class GrandchildClass
+    Inherits ChildClass
+    Protected Overrides ReadOnly Property Value As Integer = 3
+End Class
+
+Class OtherChildClass
+    Inherits ChildClass
+
+    Public Function ReadInheritedValue() As Integer
+        Return MyClass.Value
+    End Function
+End Class", @"
+internal partial class BaseClass
+{
+    protected virtual int Value { get; private set; } = 1;
+}
+
+internal partial class ChildClass : BaseClass
+{
+    protected override int Value { get => _Value; }
+
+    private int _Value = 2;
+
+    public int ReadOwnValue()
+    {
+        return _Value + _Value;
+    }
+}
+
+internal partial class GrandchildClass : ChildClass
+{
+    protected override int Value { get => _Value; }
+
+    private int _Value = 3;
+}
+
+internal partial class OtherChildClass : ChildClass
+{
+
+    public int ReadInheritedValue()
+    {
+        return base.Value;
+    }
+}");
+    }
+
+    [Fact]
     public async Task TestAbstractReadOnlyAndWriteOnlyPropertyAsync()
     {
         await TestConversionVisualBasicToCSharpAsync(
