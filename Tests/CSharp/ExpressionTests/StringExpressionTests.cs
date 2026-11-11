@@ -47,6 +47,26 @@ internal partial class TestClass
     }
 
     [Theory]
+    [InlineData("~")]
+    [InlineData("")]
+    [InlineData(@"C:\new\folder")]
+    [InlineData("first\r\nsecond")]
+    public async Task CurlyQuotedStringInInterpolationPreservesValueAsync(string value)
+    {
+        var source = "Public Class C\r\n" +
+                     "    Public Shared Function GetValue(prefix As String) As String\r\n" +
+                     "        Return $\"{prefix}{Identity(\u201c" + value + "\u201d)}\"\r\n" +
+                     "    End Function\r\n" +
+                     "    Private Shared Function Identity(value As String) As String\r\n" +
+                     "        Return value\r\n" +
+                     "    End Function\r\nEnd Class";
+        var converted = await ConvertAsync<VBToCSConversion>(source);
+        var compiler = new CSharpCompiler();
+        var assembly = compiler.AssemblyFromCode(compiler.CreateTree(converted));
+        Assert.Equal("base" + value, assembly.GetType("C").GetMethod("GetValue").Invoke(null, new object[] { "base" }));
+    }
+
+    [Theory]
     [InlineData("\r\n")]
     [InlineData("\n")]
     [InlineData("\r")]

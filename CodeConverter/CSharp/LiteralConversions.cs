@@ -13,7 +13,7 @@ internal static class LiteralConversions
     public static ExpressionSyntax GetLiteralExpression(object value, string textForUser = null, ITypeSymbol convertedType = null)
     {
         if (value is string valueTextForCompiler) {
-            textForUser = GetQuotedStringTextForUser(textForUser ?? SymbolDisplay.FormatLiteral(valueTextForCompiler, true), valueTextForCompiler);
+            textForUser = GetQuotedStringTextForUser(valueTextForCompiler);
             return SyntaxFactory.LiteralExpression(CSSyntaxKind.StringLiteralExpression,
                 SyntaxFactory.Literal(textForUser, valueTextForCompiler));
         }
@@ -85,18 +85,17 @@ internal static class LiteralConversions
             _ => null
         };
 
-    internal static string GetQuotedStringTextForUser(string textForUser, string valueTextForCompiler)
+    internal static string GetQuotedStringTextForUser(string valueTextForCompiler)
     {
-        var sourceUnquotedTextForUser = Unquote(textForUser);
         var worthBeingAVerbatimString = IsWorthBeingAVerbatimString(valueTextForCompiler);
         var destQuotedTextForUser =
-            $"\"{EscapeQuotes(sourceUnquotedTextForUser, valueTextForCompiler, worthBeingAVerbatimString)}\"";
+            $"\"{EscapeQuotes(valueTextForCompiler, worthBeingAVerbatimString)}\"";
 
         return worthBeingAVerbatimString ? "@" + destQuotedTextForUser : destQuotedTextForUser;
 
     }
 
-    internal static string EscapeQuotes(string unquotedTextForUser, string valueTextForCompiler, bool isVerbatimString)
+    internal static string EscapeQuotes(string valueTextForCompiler, bool isVerbatimString)
     {
         if (isVerbatimString) {
             return EscapeVerbatimQuotes(valueTextForCompiler);
@@ -114,15 +113,6 @@ internal static class LiteralConversions
     {
         return valueTextForCompiler.Replace("\\", "\\\\");
     }
-    private static string Unquote(string quotedText)
-    {
-        quotedText = quotedText.Replace('”', '"');
-        int firstQuoteIndex = quotedText.IndexOf("\"", StringComparison.Ordinal);
-        int lastQuoteIndex = quotedText.LastIndexOf("\"", StringComparison.Ordinal);
-        var unquoted = quotedText.Substring(firstQuoteIndex + 1, lastQuoteIndex - firstQuoteIndex - 1);
-        return unquoted;
-    }
-
     public static bool IsWorthBeingAVerbatimString(string s1)
     {
         return s1.IndexOfAny(new[] {'\r', '\n', '\\'}) > -1 &&

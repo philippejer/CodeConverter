@@ -185,7 +185,7 @@ internal partial class ExpressionNodeVisitor : VBasic.VisualBasicSyntaxVisitor<T
     public override async Task<CSharpSyntaxNode> VisitInterpolatedStringText(VBasic.Syntax.InterpolatedStringTextSyntax node)
     {
         var useVerbatim = node.Parent.DescendantNodes().OfType<VBasic.Syntax.InterpolatedStringTextSyntax>().Any(c => LiteralConversions.IsWorthBeingAVerbatimString(c.TextToken.Text));
-        var textForUser = LiteralConversions.EscapeQuotes(node.TextToken.Text, node.TextToken.ValueText, useVerbatim);
+        var textForUser = LiteralConversions.EscapeQuotes(node.TextToken.ValueText, useVerbatim);
         InterpolatedStringTextSyntax interpolatedStringTextSyntax = CS.SyntaxFactory.InterpolatedStringText(CS.SyntaxFactory.Token(default(SyntaxTriviaList), CS.SyntaxKind.InterpolatedStringTextToken, textForUser, node.TextToken.ValueText, default(SyntaxTriviaList)));
         return interpolatedStringTextSyntax;
     }
