@@ -355,6 +355,136 @@ public partial class MyTest
     }
 
     [Fact]
+    public async Task NegatedEnumOperandAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Imports System
+
+Public Enum TimeStep
+    Minutes = 15
+End Enum
+
+Public Class Example
+    Public Function Previous(value As Date, stepValue As TimeStep) As Date
+        Dim offset = -stepValue
+        value = value.AddMinutes(-TimeStep.Minutes)
+        Return value.AddMinutes(-TimeStep.Minutes + offset)
+    End Function
+End Class", @"using System;
+
+public enum TimeStep
+{
+    Minutes = 15
+}
+
+public partial class Example
+{
+    public DateTime Previous(DateTime value, TimeStep stepValue)
+    {
+        int offset = -(int)stepValue;
+        value = value.AddMinutes(-(int)TimeStep.Minutes);
+        return value.AddMinutes(-(int)TimeStep.Minutes + offset);
+    }
+}");
+    }
+
+    [Fact]
+    public async Task NegatedEnumOperandNumericPromotionAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Public Enum SmallStep As Byte
+    Minutes = 15
+End Enum
+
+Public Enum LargeStep As ULong
+    Minutes = 15
+End Enum
+
+Public Enum MediumStep As UInteger
+    Minutes = 15
+End Enum
+
+Public Class Example
+    Public Function NegateSmall(value As SmallStep) As Short
+        Return -value
+    End Function
+
+    Public Function NegateSmallNullable(value As SmallStep?) As Short?
+        Return -value
+    End Function
+
+    Public Function NegateMedium(value As MediumStep) As Long
+        Return -value
+    End Function
+
+    Public Function NegateLarge(value As LargeStep) As Decimal
+        Return -value
+    End Function
+End Class", @"
+public enum SmallStep : byte
+{
+    Minutes = 15
+}
+
+public enum LargeStep : ulong
+{
+    Minutes = 15UL
+}
+
+public enum MediumStep : uint
+{
+    Minutes = 15U
+}
+
+public partial class Example
+{
+    public short NegateSmall(SmallStep value)
+    {
+        return (short)-(short)value;
+    }
+
+    public short? NegateSmallNullable(SmallStep? value)
+    {
+        return (short?)-(short?)value;
+    }
+
+    public long NegateMedium(MediumStep value)
+    {
+        return -(long)value;
+    }
+
+    public decimal NegateLarge(LargeStep value)
+    {
+        return -(decimal)value;
+    }
+}");
+    }
+
+    [Fact]
+    public async Task NegatedNullableEnumOperandAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Public Enum TimeStep
+    Minutes = 15
+End Enum
+
+Public Class Example
+    Public Function Negate(value As TimeStep?) As Integer?
+        Return -value
+    End Function
+End Class", @"
+public enum TimeStep
+{
+    Minutes = 15
+}
+
+public partial class Example
+{
+    public int? Negate(TimeStep? value)
+    {
+        return -(int?)value;
+    }
+}");
+    }
+
+    [Fact]
     public async Task FlagsEnumAsync()
     {
         await TestConversionVisualBasicToCSharpAsync(@"<Flags()> Public Enum FilePermissions As Integer

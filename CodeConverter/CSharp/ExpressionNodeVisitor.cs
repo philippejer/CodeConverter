@@ -366,6 +366,13 @@ internal partial class ExpressionNodeVisitor : VBasic.VisualBasicSyntaxVisitor<T
         var kind = VBasic.VisualBasicExtensions.Kind(node).ConvertToken();
         CS.SyntaxKind csTokenKind = CSharpUtil.GetExpressionOperatorTokenKind(kind);
 
+        var operandType = _semanticModel.GetTypeInfo(node.Operand).Type;
+        var resultType = kind == CS.SyntaxKind.UnaryMinusExpression && (operandType.GetNullableUnderlyingType() ?? operandType)?.IsEnumType() == true
+            ? _semanticModel.GetTypeInfo(node).Type : null;
+        if (resultType != null) {
+            expr = CommonConversions.TypeConversionAnalyzer.AddExplicitConversion(node.Operand, expr, forceTargetType: resultType);
+        }
+
         if (kind == CS.SyntaxKind.LogicalNotExpression && _semanticModel.GetTypeInfo(node.Operand).ConvertedType is { } t) {
             if (t.IsNumericType() || t.IsEnumType()) {
                 csTokenKind = CS.SyntaxKind.TildeToken;
@@ -374,11 +381,15 @@ internal partial class ExpressionNodeVisitor : VBasic.VisualBasicSyntaxVisitor<T
             }
         }
 
-        return CS.SyntaxFactory.PrefixUnaryExpression(
+        var unaryExpression = CS.SyntaxFactory.PrefixUnaryExpression(
             kind,
             CS.SyntaxFactory.Token(csTokenKind),
             expr.AddParens()
         );
+        if ((resultType.GetNullableUnderlyingType() ?? resultType)?.SpecialType is SpecialType.System_SByte or SpecialType.System_Byte or SpecialType.System_Int16 or SpecialType.System_UInt16) {
+            return ValidSyntaxFactory.CastExpression(CommonConversions.GetTypeSyntax(resultType), unaryExpression);
+        }
+        return unaryExpression;
     }
 
     private async Task<ExpressionSyntax> NegateAndSimplifyOrNullAsync(VBSyntax.UnaryExpressionSyntax node, ExpressionSyntax expr, ITypeSymbol operandConvertedType)
