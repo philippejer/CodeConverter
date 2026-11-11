@@ -129,14 +129,14 @@ public static partial class Module1
     {
         var list = new List<C>();
         var result = from f in list
-                     group f by f.MyString into @group
+                     group f by f.MyString into Group
                      orderby MyString
-                     select @group;
+                     select Group;
     }
 }
 1 target compilation errors:
 CS0103: The name 'MyString' does not exist in the current context");
-        // BUG: Order by should be on @group.Key
+        // BUG: Order by should be on Group.Key
     }
 
     [Fact]
@@ -221,6 +221,34 @@ End Sub",
               select n;
     foreach (var n in res)
         Console.WriteLine(n);
+}");
+    }
+
+    [Fact]
+    public async Task GroupByNamedKeyAndImplicitGroupAsync()
+    {
+        await TestConversionVisualBasicToCSharpAsync(@"Imports System.Linq
+
+Public Class Test
+    Public Sub Run()
+        Dim values = {""one"", ""two"", ""three""}
+        Dim result = From value In values
+                     Group value By cle = New With {Key .Length = value.Length} Into Group
+                     Select length = cle.Length, count = Group.Count()
+    End Sub
+End Class", @"using System;
+using System.Linq;
+
+public partial class Test
+{
+    public void Run()
+    {
+        string[] values = new[] { ""one"", ""two"", ""three"" };
+        var result = from value in values
+                     group value by new { value.Length } into Group
+                     let cle = Group.Key
+                     select new { length = cle.Length, count = Group.Count() };
+    }
 }");
     }
 

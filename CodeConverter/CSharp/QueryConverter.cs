@@ -352,7 +352,7 @@ internal class QueryConverter
         if (!gs.Items.Any()) return CommonConversions.CsEscapedIdentifier("Group");
         var name = gs.AggregationVariables.Select(v => v.Aggregation switch {
             VBSyntax.FunctionAggregationSyntax f => f.FunctionName,
-            VBSyntax.GroupAggregationSyntax => v.NameEquals?.Identifier.Identifier,
+            VBSyntax.GroupAggregationSyntax => (SyntaxToken?)(v.NameEquals?.Identifier.Identifier ?? CommonConversions.CsEscapedIdentifier("Group")),
             _ => default
         }).Concat(gs.Keys.Select(k => k.NameEquals?.Identifier.Identifier)).FirstOrDefault(x => x != null);
         return name is {} n ? CommonConversions.ConvertIdentifier(n) : SyntaxFactory.Identifier("@group");
