@@ -34,9 +34,11 @@ public class VbHtmlConverter
         foreach (var e in parsed.ParserErrors) Warnings.Add("Parse: " + e);
         if (Environment.GetEnvironmentVariable("VBHTML_TREE") != null) Dump(parsed.Document, 0);
         _modelVbType = FindModelType(parsed.Document);
-        _options = _context.OptionsForView(viewPath, FindImports(parsed.Document));
+        var viewImports = FindImports(parsed.Document).ToList();
+        _options = _context.OptionsForView(viewPath, viewImports);
         _scope = _context.HasMvc ? ViewScope.Build(parsed.Document, _modelVbType, _context.References, _options) : null;
         var cshtml = await ChildrenAsync(parsed.Document.Children);
+        cshtml = RequiredUsingDirectives(viewPath, viewImports) + cshtml;
         cshtml = Regex.Replace(cshtml, @"\.vbhtml(?=[""'])", ".cshtml"); // view paths, e.g. Layout = "~/Views/_Layout.vbhtml"
 
         // Markup is copied verbatim but converted code uses the platform newline: use the source file's own convention throughout
@@ -184,6 +186,7 @@ public class VbHtmlConverter
     // ---- CodeConverter calls ----
     private string _modelVbType;
     private VisualBasicCompilationOptions _options;
+    private readonly HashSet<string> _requiredUsings = new HashSet<string>();
     private ViewScope _scope;
 
     /// <param name="fragment">The view block the code comes from, so the locals of enclosing blocks can be declared. Null for code outside any block.</param>
@@ -193,7 +196,7 @@ public class VbHtmlConverter
         vb = string.Concat(preamble.Select(d => "Dim " + d.Name + " As " + d.VbType + Environment.NewLine)) + vb;
         var result = await ConvertStatementsInMethodAsync(vb);
         if (!result.Success) { Warnings.Add("Convert failed: " + vb + " :: " + result.GetExceptionsAsString()); return null; }
-        var code = UnwrapBlock(result.ConvertedCode);
+        var code = ExtractMethodBody(result.ConvertedCode, _requiredUsings);
         foreach (var d in preamble) code = Regex.Replace(code, @"^[\w<>,.?\[\] ]+ " + d.Name + @"( = [^\r\n]*)?;[ \t]*\r?\n", "", RegexOptions.Multiline);
         if (Environment.GetEnvironmentVariable("VBHTML_DEBUG") != null) Console.WriteLine("[VB] " + vb + Environment.NewLine + "[CS] " + code);
         return code;
@@ -212,7 +215,6 @@ public class VbHtmlConverter
             : "Class SurroundingClass";
         var tree = VisualBasicSyntaxTree.ParseText(classHeader + Environment.NewLine + "Sub SurroundingSub()" + Environment.NewLine
             + statements + Environment.NewLine + "End Sub" + Environment.NewLine + "End Class");
-        var method = tree.GetRoot().DescendantNodes().OfType<MethodBlockBaseSyntax>().First();
         var projectId = ProjectId.CreateNewId();
         const string assemblyName = "ProjectToBeConvertedWithPartialTypes"; // internal ISymbolExtensions.ForcePartialTypesAssemblyName, as used by ConvertTextAsync
         var project = (await ThreadSafeWorkspaceHelper.EmptyAdhocSolution.GetValueAsync())
@@ -221,23 +223,36 @@ public class VbHtmlConverter
             .WithParseOptions(VisualBasicParseOptions.Default)
             .WithMetadataReferences(_context.References);
         var document = project.AddDocument("CodeToConvert", tree.GetRoot(), filePath: Path.Combine(Path.GetTempPath(), "CodeToConvert.vb"));
+        // Converts the whole document, not a selection: only then does the result include the using directives the code needs
         var options = new SingleConversionOptions {
-            SelectedTextSpan = method.Span,
             RootNamespaceOverride = string.Empty // ASP.NET compiles views outside the project's root namespace
         };
         return await ProjectConversion.ConvertSingleAsync<VBToCSConversion>(document, options);
     }
 
-    /// <summary>
-    /// The selected node is the surrounding method, so the result is that method: strip its header and braces to leave the statements.
-    /// (ConvertTextAsync avoids this by marking the node as a parent, through an internal annotation.)
-    /// </summary>
-    private static string UnwrapBlock(string cs)
+    /// <summary>The statements of the converted SurroundingSub, dedented. Adds the converted file's using directives (e.g. Microsoft.VisualBasic for Strings.Left) to <paramref name="usings"/>.</summary>
+    private static string ExtractMethodBody(string convertedFile, ISet<string> usings)
     {
-        var t = Regex.Replace(cs.Trim(), @"^(public\s+)?void\s+SurroundingSub\(\)\s*", "");
-        if (t.StartsWith("{") && t.EndsWith("}")) t = t.Substring(1, t.Length - 2);
-        var lines = t.Split(new[] { (char)10 }).Select(l => l.TrimEnd((char)13)).Select(l => l.StartsWith("    ") ? l.Substring(4) : l);
-        return string.Join(Environment.NewLine, lines).Trim((char)13, (char)10) + Environment.NewLine;
+        var root = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(convertedFile).GetRoot();
+        foreach (var u in root.DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.UsingDirectiveSyntax>())
+            usings.Add(u.ToString().Substring("using ".Length).TrimEnd(';').Trim());
+
+        var method = root.DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>().First(m => m.Identifier.Text == "SurroundingSub");
+        var lines = string.Concat(method.Body.Statements.Select(s => s.ToFullString()))
+            .Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+        var indent = lines.Where(l => l.Trim().Length > 0).Select(l => l.Length - l.TrimStart().Length).DefaultIfEmpty(0).Min();
+        return string.Join(Environment.NewLine, lines.Select(l => l.Length >= indent ? l.Substring(indent) : l.TrimStart())).Trim('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// @using directives for namespaces the converted code needs but a C# view doesn't already import
+    /// (Razor defaults, web.config namespaces, and the view's own @Imports which are emitted as @using where they appear).
+    /// </summary>
+    private string RequiredUsingDirectives(string viewPath, IEnumerable<string> viewImports)
+    {
+        var alreadyImported = new HashSet<string>(_context.CSharpViewImports(viewPath).Concat(viewImports));
+        return string.Concat(_requiredUsings.Where(u => !alreadyImported.Contains(u)).OrderBy(u => u)
+            .Select(u => "@using " + u + Environment.NewLine));
     }
 
     private async Task<string> ConvertStatementsAsync(string vb, Block fragment)
