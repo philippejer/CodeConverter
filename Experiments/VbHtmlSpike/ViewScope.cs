@@ -56,6 +56,9 @@ public class ViewScope
             .Select(l => (l.Name, l.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
     }
 
+    /// <summary>Whether the fully qualified name is a type (or VB module) rather than a namespace.</summary>
+    public bool IsType(string qualifiedName) => _semanticModel.Compilation.GetTypeByMetadataName(qualifiedName) != null;
+
     private static void AppendCode(Block block, StringBuilder sb, Dictionary<Block, int> positions)
     {
         foreach (var child in block.Children) {

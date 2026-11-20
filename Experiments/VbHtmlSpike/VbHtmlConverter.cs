@@ -112,7 +112,7 @@ public class VbHtmlConverter
             case BlockType.Expression:
                 return await ExpressionAsync(b);
             case BlockType.Directive:
-                return DirectiveText(b);
+                return IsImportsOfType(b) ? "" : DirectiveText(b);
             case BlockType.Section:
                 return await SectionAsync(b);
             case BlockType.Comment:
@@ -120,6 +120,19 @@ public class VbHtmlConverter
             default:
                 return await StatementAsync(b);
         }
+    }
+
+    /// <summary>
+    /// VB can import a type (e.g. a module) to use its members unqualified. C# would need "using static", which Razor 3's @using
+    /// doesn't support (it only takes a namespace) - but the converter fully qualifies those members, so the import can just go.
+    /// An alias (Imports X = A.B) stays: C# allows "using X = A.B" for a type too.
+    /// </summary>
+    private bool IsImportsOfType(Block directive)
+    {
+        var text = DirectiveText(directive);
+        if (!text.StartsWith("@using ")) return false;
+        var imported = text.Substring("@using ".Length).Trim();
+        return !imported.Contains('=') && _scope?.IsType(imported) == true;
     }
 
     private static string DirectiveText(Block b)
@@ -251,7 +264,9 @@ public class VbHtmlConverter
     private string RequiredUsingDirectives(string viewPath, IEnumerable<string> viewImports)
     {
         var alreadyImported = new HashSet<string>(_context.CSharpViewImports(viewPath).Concat(viewImports));
-        return string.Concat(_requiredUsings.Where(u => !alreadyImported.Contains(u)).OrderBy(u => u)
+        foreach (var u in _requiredUsings.Where(u => u.StartsWith("static ")))
+            Warnings.Add("Razor 3 has no @using static: qualify the members of " + u.Substring("static ".Length) + " by hand");
+        return string.Concat(_requiredUsings.Where(u => !alreadyImported.Contains(u) && !u.StartsWith("static ")).OrderBy(u => u)
             .Select(u => "@using " + u + Environment.NewLine));
     }
 
