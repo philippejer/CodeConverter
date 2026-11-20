@@ -15,13 +15,20 @@ public class ProjectContext
 {
     private static readonly string FrameworkRoot = @"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework";
 
-    /// <summary>Namespaces a Razor view gets implicitly from Views/web.config plus the VB project defaults.</summary>
-    private static readonly string[] ViewImports = {
-        "System", "System.Collections.Generic", "System.Linq", "Microsoft.VisualBasic",
-        "System.Web.Mvc", "System.Web.Mvc.Html", "System.Web.Routing"
+    /// <summary>
+    /// Namespaces every Razor view imports regardless of configuration (System.Web.WebPages.Razor.WebPageRazorHost's defaults),
+    /// plus Microsoft.VisualBasic which the VB compiler always imports.
+    /// </summary>
+    private static readonly string[] RazorDefaultImports = {
+        "System", "System.Collections.Generic", "System.IO", "System.Linq", "System.Net", "System.Web", "System.Web.Helpers",
+        "System.Web.Security", "System.Web.UI", "System.Web.WebPages", "Microsoft.VisualBasic"
     };
 
+    private string _appDir;
+
     public IReadOnlyCollection<PortableExecutableReference> References { get; private set; }
+
+    /// <summary>Project-wide options: use <see cref="OptionsForView"/> to also get the namespaces a particular view imports.</summary>
     public VisualBasicCompilationOptions Options { get; private set; }
 
     /// <summary>Set when the app's views won't compile the latest C# that the converter emits (it always targets LangVersion latest).</summary>
@@ -42,7 +49,7 @@ public class ProjectContext
             .WithOptionCompareText(Prop("OptionCompare", "Binary") == "Text")
             .WithOptionStrict(Prop("OptionStrict", "Off") == "On" ? OptionStrict.On : OptionStrict.Off)
             .WithOptionInfer(Prop("OptionInfer", "On") == "On")
-            .WithGlobalImports(GlobalImport.Parse(ViewImports));
+            .WithGlobalImports(GlobalImport.Parse(RazorDefaultImports));
 
         var refs = new List<string>();
         refs.AddRange(FrameworkAssemblies(Prop("TargetFramework", "net48")));
@@ -51,10 +58,31 @@ public class ProjectContext
         else Console.WriteLine("WARN no bin folder in " + appDir + ": build the app first so its types (e.g. the model classes) can be resolved");
 
         return new ProjectContext {
+            _appDir = Path.GetFullPath(appDir),
             ViewCompilerWarning = CheckViewCompiler(Path.Combine(appDir, "Web.config")),
             Options = options,
             References = refs.Select(r => (PortableExecutableReference)MetadataReference.CreateFromFile(r)).ToList()
         };
+    }
+
+    /// <summary>
+    /// A view is compiled with the Razor defaults, the namespaces of every web.config from the app root down to its folder
+    /// (usually Views/web.config's system.web.webPages.razor/pages/namespaces), and its own @Imports.
+    /// </summary>
+    public VisualBasicCompilationOptions OptionsForView(string viewPath, IEnumerable<string> viewImports)
+    {
+        var namespaces = RazorDefaultImports.Concat(WebConfigNamespaces(viewPath)).Concat(viewImports).Distinct().ToList();
+        return Options.WithGlobalImports(GlobalImport.Parse(namespaces));
+    }
+
+    private IEnumerable<string> WebConfigNamespaces(string viewPath)
+    {
+        for (var dir = Path.GetDirectoryName(Path.GetFullPath(viewPath)); dir != null && dir.StartsWith(_appDir, StringComparison.OrdinalIgnoreCase); dir = Path.GetDirectoryName(dir)) {
+            var webConfig = Path.Combine(dir, "Web.config"); // Windows file names are case-insensitive
+            if (!File.Exists(webConfig)) continue;
+            foreach (var ns in XDocument.Load(webConfig).Descendants("pages").Elements("namespaces").Elements("add"))
+                if ((string)ns.Attribute("namespace") is { Length: > 0 } name) yield return name;
+        }
     }
 
     /// <summary>
