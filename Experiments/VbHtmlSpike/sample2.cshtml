@@ -1,0 +1,40 @@
+@model MyApp.Models.OrderViewModel
+@{
+Layout = "~/Views/Shared/_Layout.cshtml";
+ViewBag.Title = "Orders";
+}
+
+<h2>Orders for @Model.CustomerName</h2>
+
+@using (Html.BeginForm("Save", "Orders", FormMethod.Post))
+{
+    <text>@Html.AntiForgeryToken()</text>
+
+        <div class="form-group">
+        @(Html.LabelFor(m => m.CustomerName))
+        @(Html.TextBoxFor(m => m.CustomerName, new { @class = "form-control" }))
+    </div>
+
+    if (Model.Lines is not null && Model.Lines.Count > 0)
+    {
+                <table>
+@foreach (var line in Model.Lines)
+{
+                    <tr>
+                    <td>@line.Name</td>
+                    <td>@(line.Qty * line.Price)</td>
+                    <td>@(line.IsActive ? "Yes" : "No")</td>
+                </tr>
+
+}
+        </table>
+
+    }
+
+        <input type="submit" value="Save" />
+
+}
+
+@section Scripts {
+    @Scripts.Render("~/bundles/jqueryval")
+}
