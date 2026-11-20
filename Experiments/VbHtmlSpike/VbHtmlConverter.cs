@@ -11,8 +11,11 @@ using ICSharpCode.CodeConverter;
 using ICSharpCode.CodeConverter.Common;
 using ICSharpCode.CodeConverter.CSharp;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.VisualBasic;
 using Microsoft.CodeAnalysis.VisualBasic.Syntax;
+using CSSyntax = Microsoft.CodeAnalysis.CSharp.Syntax;
 
 /// <summary>Experimental VBHTML -> CSHTML converter: Razor-parses the view, converts code fragments with CodeConverter, re-emits C# Razor.</summary>
 public class VbHtmlConverter
@@ -338,7 +341,84 @@ public class VbHtmlConverter
     private async Task<string> ConvertStatementsAsync(string vb, Block fragment)
     {
         var cs = await RunAsync(vb, fragment);
-        return cs == null ? null : cs.Trim() + Environment.NewLine;
+        if (cs == null) return null;
+        var block = (CSSyntax.BlockSyntax)Microsoft.CodeAnalysis.CSharp.SyntaxFactory.ParseStatement("{" + Environment.NewLine + cs + "}");
+        var rewriter = new RazorBlockRewriter();
+        var rewritten = (CSSyntax.BlockSyntax)rewriter.Visit(block);
+        if (rewriter.Changed) {
+            var workspace = (await ThreadSafeWorkspaceHelper.EmptyAdhocSolution.GetValueAsync()).Workspace;
+            rewritten = (CSSyntax.BlockSyntax)Formatter.Format(rewritten, workspace);
+            var text = rewritten.ToFullString();
+            var start = rewritten.OpenBraceToken.Span.End;
+            cs = Dedent(text.Substring(start - rewritten.FullSpan.Start, rewritten.CloseBraceToken.SpanStart - start));
+        }
+        return cs.Trim() + Environment.NewLine;
+    }
+
+    private sealed class RazorBlockRewriter : CSharpSyntaxRewriter
+    {
+        public bool Changed { get; private set; }
+
+        private CSSyntax.StatementSyntax Block(CSSyntax.StatementSyntax statement)
+        {
+            if (statement is CSSyntax.BlockSyntax) return statement;
+            Changed = true;
+            return Microsoft.CodeAnalysis.CSharp.SyntaxFactory.Block(statement);
+        }
+
+        public override SyntaxNode VisitIfStatement(CSSyntax.IfStatementSyntax node)
+        {
+            var result = (CSSyntax.IfStatementSyntax)base.VisitIfStatement(node);
+            return result.WithStatement(Block(result.Statement));
+        }
+
+        public override SyntaxNode VisitElseClause(CSSyntax.ElseClauseSyntax node)
+        {
+            var result = (CSSyntax.ElseClauseSyntax)base.VisitElseClause(node);
+            return result.Statement is CSSyntax.IfStatementSyntax ? result : result.WithStatement(Block(result.Statement));
+        }
+
+        public override SyntaxNode VisitForStatement(CSSyntax.ForStatementSyntax node)
+        {
+            var result = (CSSyntax.ForStatementSyntax)base.VisitForStatement(node);
+            return result.WithStatement(Block(result.Statement));
+        }
+
+        public override SyntaxNode VisitForEachStatement(CSSyntax.ForEachStatementSyntax node)
+        {
+            var result = (CSSyntax.ForEachStatementSyntax)base.VisitForEachStatement(node);
+            return result.WithStatement(Block(result.Statement));
+        }
+
+        public override SyntaxNode VisitForEachVariableStatement(CSSyntax.ForEachVariableStatementSyntax node)
+        {
+            var result = (CSSyntax.ForEachVariableStatementSyntax)base.VisitForEachVariableStatement(node);
+            return result.WithStatement(Block(result.Statement));
+        }
+
+        public override SyntaxNode VisitWhileStatement(CSSyntax.WhileStatementSyntax node)
+        {
+            var result = (CSSyntax.WhileStatementSyntax)base.VisitWhileStatement(node);
+            return result.WithStatement(Block(result.Statement));
+        }
+
+        public override SyntaxNode VisitDoStatement(CSSyntax.DoStatementSyntax node)
+        {
+            var result = (CSSyntax.DoStatementSyntax)base.VisitDoStatement(node);
+            return result.WithStatement(Block(result.Statement));
+        }
+
+        public override SyntaxNode VisitUsingStatement(CSSyntax.UsingStatementSyntax node)
+        {
+            var result = (CSSyntax.UsingStatementSyntax)base.VisitUsingStatement(node);
+            return result.WithStatement(Block(result.Statement));
+        }
+
+        public override SyntaxNode VisitLockStatement(CSSyntax.LockStatementSyntax node)
+        {
+            var result = (CSSyntax.LockStatementSyntax)base.VisitLockStatement(node);
+            return result.WithStatement(Block(result.Statement));
+        }
     }
 
     private async Task<string> ConvertExpressionAsync(string vbExpr, Block fragment)
