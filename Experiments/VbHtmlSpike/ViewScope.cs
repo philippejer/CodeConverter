@@ -123,7 +123,7 @@ public class ViewScope
             switch (b.Type) {
                 case BlockType.Expression:
                     var code = string.Concat(b.Children.OfType<Span>().Where(c => c.Kind == SpanKind.Code).Select(c => c.Content));
-                    if (code == "ModelType") break; // directive, not an expression
+                    if (VbKeyword.Is(code, "ModelType")) break; // directive, not an expression
                     EnsureNewLine(sb);
                     positions[b] = sb.Length;
                     sb.Append("__W(").Append(code).AppendLine(")");

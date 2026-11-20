@@ -75,7 +75,7 @@ public class VbHtmlConverter
             : FindImports(b));
 
     private static bool IsModelTypeDirective(SyntaxTreeNode n) =>
-        n is Block b && b.Type == BlockType.Expression && b.Children.OfType<Span>().Any(c => c.Kind == SpanKind.Code && c.Content == "ModelType");
+        n is Block b && b.Type == BlockType.Expression && b.Children.OfType<Span>().Any(c => c.Kind == SpanKind.Code && VbKeyword.Is(c.Content, "ModelType"));
 
     private static void Dump(SyntaxTreeNode n, int d)
     {
@@ -91,7 +91,10 @@ public class VbHtmlConverter
         for (int i = 0; i < list.Count; i++) {
             var n = list[i];
             if (n is Span s) {
-                if (s.Kind == SpanKind.Transition && s.Content == "@") continue; // keep <text>/</text> transitions, they are the same in C# Razor
+                // Drop the "@" that starts markup within VB code (@<tr>): C# Razor recognises tags in code without it.
+                // Keep it for a text line (@:text), which is the same in both, and keep <text>/</text> transitions.
+                bool startsTextLine = i + 1 < list.Count && list[i + 1] is Span after && after.Content.StartsWith(":");
+                if (s.Kind == SpanKind.Transition && s.Content == "@" && !startsTextLine) continue;
                 sb.Append(s.Content);
             } else if (n is Block b) {
                 // @ModelType X  => @model X (type is the rest of the following markup line)
@@ -146,8 +149,8 @@ public class VbHtmlConverter
     private static string DirectiveText(Block b)
     {
         var text = string.Concat(b.Children.OfType<Span>().Where(c => c.Kind != SpanKind.Transition).Select(c => c.Content));
-        if (text.StartsWith("Imports ")) return "@using " + text.Substring("Imports ".Length);
-        if (text.StartsWith("Inherits ")) return "@inherits " + text.Substring("Inherits ".Length);
+        if (VbKeyword.StartsWith(text, "Imports ")) return "@using " + text.Substring("Imports ".Length);
+        if (VbKeyword.StartsWith(text, "Inherits ")) return "@inherits " + text.Substring("Inherits ".Length);
         return "@" + text;
     }
 
@@ -171,7 +174,7 @@ public class VbHtmlConverter
 
     private async Task<string> StatementAsync(Block b)
     {
-        bool isCode = b.Children.OfType<Span>().Any(c => c.Kind == SpanKind.MetaCode && c.Content == "Code");
+        bool isCode = b.Children.OfType<Span>().Any(c => c.Kind == SpanKind.MetaCode && VbKeyword.Is(c.Content, "Code"));
         var cs = await CodeBlockAsync(b);
         if (cs == null) return "@* UNCONVERTED *@ @" + string.Concat(b.Children.OfType<Span>().Select(s => s.Content));
         if (isCode) return "@{" + Environment.NewLine + cs + "}";
