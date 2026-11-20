@@ -7,8 +7,9 @@ using System.Threading.Tasks;
 public static class Program
 {
     private const string DefaultTarget = @"C:\path\to\WebApp";
+    private const bool DeleteSourceFiles = true;
 
-    /// <summary>Usage: VbHtmlSpike [file.vbhtml | directory]...  (defaults to the Affaire views). Writes .cshtml next to each source.</summary>
+    /// <summary>Usage: VbHtmlSpike [file.vbhtml | directory]...  (defaults to the Affaire views). Writes .cshtml next to each source; DeleteSourceFiles controls source deletion.</summary>
     public static async Task Main(string[] args)
     {
         var targets = args.Length > 0 ? args : new[] { DefaultTarget };
@@ -28,8 +29,8 @@ public static class Program
             var cshtml = await conv.ConvertAsync(File.ReadAllText(path), path);
             var outPath = Path.ChangeExtension(path, ".cshtml");
             File.WriteAllText(outPath, cshtml, new UTF8Encoding(true));
-            File.Delete(path);
-            Console.WriteLine((conv.Warnings.Count == 0 ? "OK   " : "WARN ") + path + " -> " + Path.GetFileName(outPath) + " (source deleted)");
+            if (DeleteSourceFiles) File.Delete(path);
+            Console.WriteLine((conv.Warnings.Count == 0 ? "OK   " : "WARN ") + path + " -> " + Path.GetFileName(outPath) + (DeleteSourceFiles ? " (source deleted)" : " (source retained)"));
             foreach (var w in conv.Warnings) Console.WriteLine("       " + w.Replace(Environment.NewLine, " "));
             if (conv.Warnings.Count == 0) clean++;
             if (Environment.GetEnvironmentVariable("VBHTML_SHOW") != null) Console.WriteLine(cshtml);
