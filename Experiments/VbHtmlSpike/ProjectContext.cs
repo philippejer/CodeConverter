@@ -38,9 +38,9 @@ public class ProjectContext
 
     public static ProjectContext Load(string appDir)
     {
-        var vbproj = Directory.EnumerateFiles(appDir, "*.vbproj").FirstOrDefault()
-            ?? throw new FileNotFoundException("No .vbproj found in " + appDir + " - needed for Option settings and target framework");
-        var props = XDocument.Load(vbproj).Descendants().Where(e => !e.HasElements).GroupBy(e => e.Name.LocalName)
+        var project = Directory.EnumerateFiles(appDir, "*.vbproj").Concat(Directory.EnumerateFiles(appDir, "*.csproj")).FirstOrDefault()
+            ?? throw new FileNotFoundException("No .vbproj or .csproj found in " + appDir + " - needed for Option settings and target framework");
+        var props = XDocument.Load(project).Descendants().Where(e => !e.HasElements).GroupBy(e => e.Name.LocalName)
             .ToDictionary(g => g.Key, g => g.Last().Value.Trim());
         string Prop(string name, string dflt) => props.TryGetValue(name, out var v) && v.Length > 0 ? v : dflt;
 
@@ -52,7 +52,7 @@ public class ProjectContext
             .WithGlobalImports(GlobalImport.Parse(RazorDefaultImports.Append(VisualBasicImplicitImport)));
 
         var refs = new List<string>();
-        refs.AddRange(FrameworkAssemblies(Prop("TargetFramework", "net48")));
+        refs.AddRange(FrameworkAssemblies(Prop("TargetFramework", Prop("TargetFrameworkVersion", "net48"))));
         var bin = Path.Combine(appDir, "bin");
         if (Directory.Exists(bin)) refs.AddRange(Directory.EnumerateFiles(bin, "*.dll"));
         else Console.WriteLine("WARN no bin folder in " + appDir + ": build the app first so its types (e.g. the model classes) can be resolved");

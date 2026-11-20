@@ -6,12 +6,12 @@ using System.Threading.Tasks;
 
 public static class Program
 {
-    private const string DefaultSampleApp = @"C:\path\to\SampleWebApp";
+    private const string DefaultTarget = @"C:\path\to\WebApp";
 
-    /// <summary>Usage: VbHtmlSpike [file.vbhtml | directory]...  (defaults to the sample web app). Writes .cshtml next to each source.</summary>
+    /// <summary>Usage: VbHtmlSpike [file.vbhtml | directory]...  (defaults to the Affaire views). Writes .cshtml next to each source.</summary>
     public static async Task Main(string[] args)
     {
-        var targets = args.Length > 0 ? args : new[] { DefaultSampleApp };
+        var targets = args.Length > 0 ? args : new[] { DefaultTarget };
         var files = targets.SelectMany(t => Directory.Exists(t)
             ? Directory.EnumerateFiles(t, "*.vbhtml", SearchOption.AllDirectories).Where(f => !IsBuildOutput(f))
             : new[] { t }).OrderBy(f => f).ToList();
@@ -28,7 +28,8 @@ public static class Program
             var cshtml = await conv.ConvertAsync(File.ReadAllText(path), path);
             var outPath = Path.ChangeExtension(path, ".cshtml");
             File.WriteAllText(outPath, cshtml, new UTF8Encoding(true));
-            Console.WriteLine((conv.Warnings.Count == 0 ? "OK   " : "WARN ") + path + " -> " + Path.GetFileName(outPath));
+            File.Delete(path);
+            Console.WriteLine((conv.Warnings.Count == 0 ? "OK   " : "WARN ") + path + " -> " + Path.GetFileName(outPath) + " (source deleted)");
             foreach (var w in conv.Warnings) Console.WriteLine("       " + w.Replace(Environment.NewLine, " "));
             if (conv.Warnings.Count == 0) clean++;
             if (Environment.GetEnvironmentVariable("VBHTML_SHOW") != null) Console.WriteLine(cshtml);
@@ -36,12 +37,12 @@ public static class Program
         Console.WriteLine($"{clean}/{files.Count} views converted without warnings.");
     }
 
-    /// <summary>The nearest ancestor folder containing a .vbproj - that project's references and Option settings apply to the view.</summary>
+    /// <summary>The nearest ancestor folder containing a project file - that project's references and Option settings apply to the view.</summary>
     private static string FindAppDir(string viewPath)
     {
         for (var dir = Path.GetDirectoryName(Path.GetFullPath(viewPath)); dir != null; dir = Path.GetDirectoryName(dir))
-            if (Directory.EnumerateFiles(dir, "*.vbproj").Any()) return dir;
-        throw new FileNotFoundException("No .vbproj found above " + viewPath);
+            if (Directory.EnumerateFiles(dir, "*.vbproj").Any() || Directory.EnumerateFiles(dir, "*.csproj").Any()) return dir;
+        throw new FileNotFoundException("No .vbproj or .csproj found above " + viewPath);
     }
 
     private static bool IsBuildOutput(string f) => f.Contains(@"\bin\") || f.Contains(@"\obj\");
