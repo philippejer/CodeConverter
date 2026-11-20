@@ -26,14 +26,16 @@ public class VbHtmlConverter
         _context = context;
     }
 
-    public async Task<string> ConvertAsync(string vbhtml)
+    /// <param name="viewPath">Locates the web.config files whose namespaces the view imports.</param>
+    public async Task<string> ConvertAsync(string vbhtml, string viewPath)
     {
         var engine = new RazorTemplateEngine(new RazorEngineHost(new VBRazorCodeLanguage()));
         var parsed = engine.ParseTemplate(new StringReader(vbhtml));
         foreach (var e in parsed.ParserErrors) Warnings.Add("Parse: " + e);
         if (Environment.GetEnvironmentVariable("VBHTML_TREE") != null) Dump(parsed.Document, 0);
         _modelVbType = FindModelType(parsed.Document);
-        _scope = _context.HasMvc ? ViewScope.Build(parsed.Document, _modelVbType, _context) : null;
+        _options = _context.OptionsForView(viewPath, FindImports(parsed.Document));
+        _scope = _context.HasMvc ? ViewScope.Build(parsed.Document, _modelVbType, _context.References, _options) : null;
         var cshtml = await ChildrenAsync(parsed.Document.Children);
         cshtml = Regex.Replace(cshtml, @"\.vbhtml(?=[""'])", ".cshtml"); // view paths, e.g. Layout = "~/Views/_Layout.vbhtml"
 
@@ -59,6 +61,12 @@ public class VbHtmlConverter
         }
         return null;
     }
+
+    /// <summary>The namespaces (or "Alias = Namespace") of the view's @Imports directives.</summary>
+    private static IEnumerable<string> FindImports(Block block) =>
+        block.Children.OfType<Block>().SelectMany(b => b.Type == BlockType.Directive
+            ? new[] { DirectiveText(b) }.Where(t => t.StartsWith("@using ")).Select(t => t.Substring("@using ".Length).Trim())
+            : FindImports(b));
 
     private static bool IsModelTypeDirective(SyntaxTreeNode n) =>
         n is Block b && b.Type == BlockType.Expression && b.Children.OfType<Span>().Any(c => c.Kind == SpanKind.Code && c.Content == "ModelType");
@@ -175,6 +183,7 @@ public class VbHtmlConverter
 
     // ---- CodeConverter calls ----
     private string _modelVbType;
+    private VisualBasicCompilationOptions _options;
     private ViewScope _scope;
 
     /// <param name="fragment">The view block the code comes from, so the locals of enclosing blocks can be declared. Null for code outside any block.</param>
@@ -208,7 +217,7 @@ public class VbHtmlConverter
         const string assemblyName = "ProjectToBeConvertedWithPartialTypes"; // internal ISymbolExtensions.ForcePartialTypesAssemblyName, as used by ConvertTextAsync
         var project = (await ThreadSafeWorkspaceHelper.EmptyAdhocSolution.GetValueAsync())
             .AddProject(projectId, assemblyName, assemblyName, LanguageNames.VisualBasic).GetProject(projectId)
-            .WithCompilationOptions(_context.Options)
+            .WithCompilationOptions(_options)
             .WithParseOptions(VisualBasicParseOptions.Default)
             .WithMetadataReferences(_context.References);
         var document = project.AddDocument("CodeToConvert", tree.GetRoot(), filePath: Path.Combine(Path.GetTempPath(), "CodeToConvert.vb"));

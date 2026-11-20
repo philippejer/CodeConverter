@@ -28,7 +28,7 @@ public class ViewScope
     public static string PageBaseType(string modelVbType) =>
         modelVbType == null ? "System.Web.Mvc.WebViewPage" : "System.Web.Mvc.WebViewPage(Of " + modelVbType + ")";
 
-    public static ViewScope Build(Block document, string modelVbType, ProjectContext context)
+    public static ViewScope Build(Block document, string modelVbType, IEnumerable<MetadataReference> references, VisualBasicCompilationOptions options)
     {
         var sb = new StringBuilder();
         sb.AppendLine("MustInherit Class __View").AppendLine("    Inherits " + PageBaseType(modelVbType))
@@ -41,7 +41,7 @@ public class ViewScope
         sb.AppendLine("    End Sub").AppendLine("End Class");
 
         var tree = VisualBasicSyntaxTree.ParseText(sb.ToString());
-        var compilation = VisualBasicCompilation.Create("__ViewScope", new[] { tree }, context.References, context.Options);
+        var compilation = VisualBasicCompilation.Create("__ViewScope", new[] { tree }, references, options);
         if (Environment.GetEnvironmentVariable("VBHTML_DEBUG") != null) Console.WriteLine("[SCOPE]" + Environment.NewLine + sb);
         return new ViewScope(compilation.GetSemanticModel(tree), positions);
     }

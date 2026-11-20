@@ -25,7 +25,7 @@ public static class Program
                 if (context.ViewCompilerWarning != null) Console.WriteLine("WARN " + appDir + ": " + context.ViewCompilerWarning);
             }
             var conv = new VbHtmlConverter(context);
-            var cshtml = await conv.ConvertAsync(File.ReadAllText(path));
+            var cshtml = await conv.ConvertAsync(File.ReadAllText(path), path);
             var outPath = Path.ChangeExtension(path, ".cshtml");
             File.WriteAllText(outPath, cshtml, new UTF8Encoding(true));
             Console.WriteLine((conv.Warnings.Count == 0 ? "OK   " : "WARN ") + path + " -> " + Path.GetFileName(outPath));
