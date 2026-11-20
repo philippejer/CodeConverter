@@ -177,21 +177,10 @@ public class VbHtmlConverter
     private string _modelVbType;
     private ViewScope _scope;
 
-    /// <summary>Declarations giving the converter the type info it needs (e.g. ViewData(...) becomes an indexer).</summary>
-    private IEnumerable<(string Name, string VbType)> Preamble()
-    {
-        // Mirrors the members of System.Web.Mvc.WebViewPage(Of TModel) that views use
-        yield return ("ViewData", "System.Web.Mvc.ViewDataDictionary");
-        yield return ("Html", _modelVbType == null ? "System.Web.Mvc.HtmlHelper" : "System.Web.Mvc.HtmlHelper(Of " + _modelVbType + ")");
-        yield return ("Url", "System.Web.Mvc.UrlHelper");
-        if (_modelVbType != null) yield return ("Model", _modelVbType);
-    }
-
     /// <param name="fragment">The view block the code comes from, so the locals of enclosing blocks can be declared. Null for code outside any block.</param>
     private async Task<string> RunAsync(string vb, Block fragment)
     {
-        var preamble = _context.HasMvc ? Preamble().ToList() : new List<(string Name, string VbType)>();
-        if (_scope != null) preamble.AddRange(_scope.LocalsInScope(fragment).Where(l => preamble.All(p => p.Name != l.Name)));
+        var preamble = _scope?.LocalsInScope(fragment).ToList() ?? new List<(string Name, string VbType)>();
         vb = string.Concat(preamble.Select(d => "Dim " + d.Name + " As " + d.VbType + Environment.NewLine)) + vb;
         var result = await ConvertStatementsInMethodAsync(vb);
         if (!result.Success) { Warnings.Add("Convert failed: " + vb + " :: " + result.GetExceptionsAsString()); return null; }
@@ -204,11 +193,15 @@ public class VbHtmlConverter
     /// <summary>
     /// Equivalent of ProjectConversion.ConvertTextAsync for statements, except the VB project gets the app's own compilation options:
     /// ConvertTextAsync always uses default ones (e.g. Option Strict Off), but Option Strict/Compare and the imports change the conversion.
-    /// Mirrors its wrapping (LanguageConversionExtensions.MakeFullCompilationUnit) and its fabricated assembly name.
+    /// Mirrors its wrapping (LanguageConversionExtensions.MakeFullCompilationUnit) and its fabricated assembly name,
+    /// except the class inherits the view's page base type: like in the compiled view, every page member (Request, Session, ViewBag...) then resolves.
     /// </summary>
     private async Task<ConversionResult> ConvertStatementsInMethodAsync(string statements)
     {
-        var tree = VisualBasicSyntaxTree.ParseText("Class SurroundingClass" + Environment.NewLine + "Sub SurroundingSub()" + Environment.NewLine
+        var classHeader = _context.HasMvc
+            ? "MustInherit Class SurroundingClass" + Environment.NewLine + "Inherits " + ViewScope.PageBaseType(_modelVbType)
+            : "Class SurroundingClass";
+        var tree = VisualBasicSyntaxTree.ParseText(classHeader + Environment.NewLine + "Sub SurroundingSub()" + Environment.NewLine
             + statements + Environment.NewLine + "End Sub" + Environment.NewLine + "End Class");
         var method = tree.GetRoot().DescendantNodes().OfType<MethodBlockBaseSyntax>().First();
         var projectId = ProjectId.CreateNewId();

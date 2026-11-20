@@ -24,11 +24,14 @@ public class ViewScope
         _positions = positions;
     }
 
+    /// <summary>The class ASP.NET MVC compiles a view into inherits this (Views/web.config pageBaseType, with @ModelType as the type argument).</summary>
+    public static string PageBaseType(string modelVbType) =>
+        modelVbType == null ? "System.Web.Mvc.WebViewPage" : "System.Web.Mvc.WebViewPage(Of " + modelVbType + ")";
+
     public static ViewScope Build(Block document, string modelVbType, ProjectContext context)
     {
-        var baseType = modelVbType == null ? "System.Web.Mvc.WebViewPage" : "System.Web.Mvc.WebViewPage(Of " + modelVbType + ")";
         var sb = new StringBuilder();
-        sb.AppendLine("MustInherit Class __View").AppendLine("    Inherits " + baseType)
+        sb.AppendLine("MustInherit Class __View").AppendLine("    Inherits " + PageBaseType(modelVbType))
           .AppendLine("    Sub __M()").AppendLine("    End Sub")
           .AppendLine("    Sub __W(o As Object)").AppendLine("    End Sub")
           .AppendLine("    Sub __Execute()");
