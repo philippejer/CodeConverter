@@ -15,14 +15,14 @@ public class ProjectContext
 {
     private static readonly string FrameworkRoot = @"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework";
 
-    /// <summary>
-    /// Namespaces every Razor view imports regardless of configuration (System.Web.WebPages.Razor.WebPageRazorHost's defaults),
-    /// plus Microsoft.VisualBasic which the VB compiler always imports.
-    /// </summary>
+    /// <summary>Namespaces every Razor view imports regardless of configuration or language (System.Web.WebPages.Razor.WebPageRazorHost's defaults).</summary>
     private static readonly string[] RazorDefaultImports = {
         "System", "System.Collections.Generic", "System.IO", "System.Linq", "System.Net", "System.Web", "System.Web.Helpers",
-        "System.Web.Security", "System.Web.UI", "System.Web.WebPages", "Microsoft.VisualBasic"
+        "System.Web.Security", "System.Web.UI", "System.Web.WebPages"
     };
+
+    /// <summary>The VB compiler always imports this one too, but a C# view doesn't: converted code using it needs an @using.</summary>
+    private const string VisualBasicImplicitImport = "Microsoft.VisualBasic";
 
     private string _appDir;
 
@@ -49,7 +49,7 @@ public class ProjectContext
             .WithOptionCompareText(Prop("OptionCompare", "Binary") == "Text")
             .WithOptionStrict(Prop("OptionStrict", "Off") == "On" ? OptionStrict.On : OptionStrict.Off)
             .WithOptionInfer(Prop("OptionInfer", "On") == "On")
-            .WithGlobalImports(GlobalImport.Parse(RazorDefaultImports));
+            .WithGlobalImports(GlobalImport.Parse(RazorDefaultImports.Append(VisualBasicImplicitImport)));
 
         var refs = new List<string>();
         refs.AddRange(FrameworkAssemblies(Prop("TargetFramework", "net48")));
@@ -71,9 +71,12 @@ public class ProjectContext
     /// </summary>
     public VisualBasicCompilationOptions OptionsForView(string viewPath, IEnumerable<string> viewImports)
     {
-        var namespaces = RazorDefaultImports.Concat(WebConfigNamespaces(viewPath)).Concat(viewImports).Distinct().ToList();
+        var namespaces = CSharpViewImports(viewPath).Append(VisualBasicImplicitImport).Concat(viewImports).Distinct().ToList();
         return Options.WithGlobalImports(GlobalImport.Parse(namespaces));
     }
+
+    /// <summary>Namespaces a C# view in the same folder imports without any @using: the same web.config and Razor defaults apply to both languages.</summary>
+    public IEnumerable<string> CSharpViewImports(string viewPath) => RazorDefaultImports.Concat(WebConfigNamespaces(viewPath));
 
     private IEnumerable<string> WebConfigNamespaces(string viewPath)
     {
