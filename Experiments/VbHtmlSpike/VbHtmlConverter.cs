@@ -37,6 +37,10 @@ public class VbHtmlConverter
         var viewImports = FindImports(parsed.Document).ToList();
         _options = _context.OptionsForView(viewPath, viewImports);
         _scope = _context.HasMvc ? ViewScope.Build(parsed.Document, _modelVbType, _context.References, _options) : null;
+        _helperStubsVb = ViewScope.HelperStubsVb(parsed.Document);
+        _helperNames = ViewScope.MemberBlocks(parsed.Document).Where(m => m.Type == BlockType.Helper)
+            .Select(m => ViewScope.HelperName(ViewScope.HelperParts(m).Signature)).ToHashSet();
+        _pageMembersVb = ViewScope.PageMembersVb(parsed.Document);
         var cshtml = await ChildrenAsync(parsed.Document.Children);
         cshtml = RequiredUsingDirectives(viewPath, viewImports) + cshtml;
         cshtml = Regex.Replace(cshtml, @"\.vbhtml(?=[""'])", ".cshtml"); // view paths, e.g. Layout = "~/Views/_Layout.vbhtml"
@@ -117,6 +121,10 @@ public class VbHtmlConverter
                 return await SectionAsync(b);
             case BlockType.Comment:
                 return string.Concat(b.Children.OfType<Span>().Select(c => c.Content)); // @* *@ same in both
+            case BlockType.Functions:
+                return await FunctionsAsync(b);
+            case BlockType.Helper:
+                return await HelperAsync(b);
             default:
                 return await StatementAsync(b);
         }
@@ -163,20 +171,57 @@ public class VbHtmlConverter
 
     private async Task<string> StatementAsync(Block b)
     {
+        bool isCode = b.Children.OfType<Span>().Any(c => c.Kind == SpanKind.MetaCode && c.Content == "Code");
+        var cs = await CodeBlockAsync(b);
+        if (cs == null) return "@* UNCONVERTED *@ @" + string.Concat(b.Children.OfType<Span>().Select(s => s.Content));
+        if (isCode) return "@{" + Environment.NewLine + cs + "}";
+        return "@" + cs.TrimStart();
+    }
+
+    /// <summary>The C# for a block of VB code interleaved with markup (e.g. an If or a helper's body), markup included.</summary>
+    private async Task<string> CodeBlockAsync(Block b)
+    {
         var saved = _markupPlaceholders;
         _markupPlaceholders = new List<string>();
         try {
-            bool isCode = b.Children.OfType<Span>().Any(c => c.Kind == SpanKind.MetaCode && c.Content == "Code");
             var vb = new StringBuilder();
             await GatherAsync(b, vb);
             var cs = await ConvertStatementsAsync(vb.ToString(), b);
-            if (cs == null) return "@* UNCONVERTED *@ @" + vb;
+            if (cs == null) return null;
             var placeholders = _markupPlaceholders;
-            cs = Regex.Replace(cs, @"__M(\d+)\(\);\s*__E\(\);", m => placeholders[int.Parse(m.Groups[1].Value)]);
-            if (isCode) return "@{" + Environment.NewLine + cs + "}";
-            return "@" + cs.TrimStart();
+            return Regex.Replace(cs, @"__M(\d+)\(\);\s*__E\(\);", m => placeholders[int.Parse(m.Groups[1].Value)]);
         } finally { _markupPlaceholders = saved; }
     }
+
+    /// <summary>@Functions ... End Functions => @functions { ... }: the code is members of the page class, converted as such.</summary>
+    private async Task<string> FunctionsAsync(Block b)
+    {
+        var members = await ConvertMembersAsync(ViewScope.FunctionsCode(b));
+        if (members == null) return "@* UNCONVERTED *@ @Functions" + ViewScope.FunctionsCode(b) + "End Functions";
+        return "@functions {" + Environment.NewLine + Indent(members) + "}";
+    }
+
+    /// <summary>
+    /// @Helper Name(x As T) ... End Helper => @helper Name(T x) { ... }: the signature is converted as a method's,
+    /// the body like any other code block (its fragments see the parameters through the view scope).
+    /// </summary>
+    private async Task<string> HelperAsync(Block b)
+    {
+        var (signature, body) = ViewScope.HelperParts(b);
+        var name = ViewScope.HelperName(signature);
+        var paramsVb = signature.Substring(name.Length).Trim();
+        var result = await ConvertInPageClassAsync("Sub __HelperSignature" + (paramsVb.Length > 0 ? paramsVb : "()") + Environment.NewLine + "End Sub");
+        var parameters = result.Success
+            ? FindMethod(ParseConverted(result.ConvertedCode), "__HelperSignature")?.ParameterList.ToString()
+            : null;
+        if (parameters == null) { Warnings.Add("Helper signature not converted: " + signature); parameters = paramsVb; }
+        var cs = body == null ? "" : await CodeBlockAsync(body) ?? "@* UNCONVERTED BODY *@" + Environment.NewLine;
+        return "@helper " + name + parameters + " {" + Environment.NewLine + Indent(cs) + "}";
+    }
+
+    private static string Indent(string code) =>
+        string.Concat(code.Split('\n').Select(l => l.TrimEnd('\r')).Where((l, i) => l.Length > 0 || i > 0)
+            .Select(l => (l.Length > 0 ? "    " + l : l) + Environment.NewLine)).TrimEnd() + Environment.NewLine;
 
     private async Task GatherAsync(Block b, StringBuilder vb)
     {
@@ -201,15 +246,17 @@ public class VbHtmlConverter
     private VisualBasicCompilationOptions _options;
     private readonly HashSet<string> _requiredUsings = new HashSet<string>();
     private ViewScope _scope;
+    private string _pageMembersVb = "", _helperStubsVb = "";
+    private HashSet<string> _helperNames = new HashSet<string>();
 
     /// <param name="fragment">The view block the code comes from, so the locals of enclosing blocks can be declared. Null for code outside any block.</param>
     private async Task<string> RunAsync(string vb, Block fragment)
     {
         var preamble = _scope?.LocalsInScope(fragment).ToList() ?? new List<(string Name, string VbType)>();
         vb = string.Concat(preamble.Select(d => "Dim " + d.Name + " As " + d.VbType + Environment.NewLine)) + vb;
-        var result = await ConvertStatementsInMethodAsync(vb);
+        var result = await ConvertInPageClassAsync(_pageMembersVb + "Sub SurroundingSub()" + Environment.NewLine + vb + Environment.NewLine + "End Sub");
         if (!result.Success) { Warnings.Add("Convert failed: " + vb + " :: " + result.GetExceptionsAsString()); return null; }
-        var code = ExtractMethodBody(result.ConvertedCode, _requiredUsings);
+        var code = Dedent(string.Concat(FindMethod(ParseConverted(result.ConvertedCode), "SurroundingSub").Body.Statements.Select(s => s.ToFullString())));
         foreach (var d in preamble) code = Regex.Replace(code, @"^[\w<>,.?\[\] ]+ " + d.Name + @"( = [^\r\n]*)?;[ \t]*\r?\n", "", RegexOptions.Multiline);
         if (Environment.GetEnvironmentVariable("VBHTML_DEBUG") != null) Console.WriteLine("[VB] " + vb + Environment.NewLine + "[CS] " + code);
         return code;
@@ -221,13 +268,12 @@ public class VbHtmlConverter
     /// Mirrors its wrapping (LanguageConversionExtensions.MakeFullCompilationUnit) and its fabricated assembly name,
     /// except the class inherits the view's page base type: like in the compiled view, every page member (Request, Session, ViewBag...) then resolves.
     /// </summary>
-    private async Task<ConversionResult> ConvertStatementsInMethodAsync(string statements)
+    private async Task<ConversionResult> ConvertInPageClassAsync(string classMembers)
     {
         var classHeader = _context.HasMvc
             ? "MustInherit Class SurroundingClass" + Environment.NewLine + "Inherits " + ViewScope.PageBaseType(_modelVbType)
             : "Class SurroundingClass";
-        var tree = VisualBasicSyntaxTree.ParseText(classHeader + Environment.NewLine + "Sub SurroundingSub()" + Environment.NewLine
-            + statements + Environment.NewLine + "End Sub" + Environment.NewLine + "End Class");
+        var tree = VisualBasicSyntaxTree.ParseText(classHeader + Environment.NewLine + classMembers + Environment.NewLine + "End Class");
         var projectId = ProjectId.CreateNewId();
         const string assemblyName = "ProjectToBeConvertedWithPartialTypes"; // internal ISymbolExtensions.ForcePartialTypesAssemblyName, as used by ConvertTextAsync
         var project = (await ThreadSafeWorkspaceHelper.EmptyAdhocSolution.GetValueAsync())
@@ -243,16 +289,32 @@ public class VbHtmlConverter
         return await ProjectConversion.ConvertSingleAsync<VBToCSConversion>(document, options);
     }
 
-    /// <summary>The statements of the converted SurroundingSub, dedented. Adds the converted file's using directives (e.g. Microsoft.VisualBasic for Strings.Left) to <paramref name="usings"/>.</summary>
-    private static string ExtractMethodBody(string convertedFile, ISet<string> usings)
+    /// <summary>Converts @Functions code: the C# members of the page class, except the helper stubs it was converted alongside.</summary>
+    private async Task<string> ConvertMembersAsync(string membersVb)
+    {
+        var result = await ConvertInPageClassAsync(_helperStubsVb + membersVb);
+        if (!result.Success) { Warnings.Add("Convert failed: " + membersVb + " :: " + result.GetExceptionsAsString()); return null; }
+        var pageClass = ParseConverted(result.ConvertedCode).DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax>()
+            .First(c => c.Identifier.Text == "SurroundingClass");
+        var members = pageClass.Members.Where(m => !(m is Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax method && _helperNames.Contains(method.Identifier.Text)));
+        return Dedent(string.Concat(members.Select(m => m.ToFullString())));
+    }
+
+    /// <summary>Parses a converted file, adding its using directives (e.g. Microsoft.VisualBasic for Strings.Left) to those the view needs.</summary>
+    private SyntaxNode ParseConverted(string convertedFile)
     {
         var root = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(convertedFile).GetRoot();
         foreach (var u in root.DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.UsingDirectiveSyntax>())
-            usings.Add(u.ToString().Substring("using ".Length).TrimEnd(';').Trim());
+            _requiredUsings.Add(u.ToString().Substring("using ".Length).TrimEnd(';').Trim());
+        return root;
+    }
 
-        var method = root.DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>().First(m => m.Identifier.Text == "SurroundingSub");
-        var lines = string.Concat(method.Body.Statements.Select(s => s.ToFullString()))
-            .Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+    private static Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax FindMethod(SyntaxNode root, string name) =>
+        root.DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>().FirstOrDefault(m => m.Identifier.Text == name);
+
+    private static string Dedent(string code)
+    {
+        var lines = code.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
         var indent = lines.Where(l => l.Trim().Length > 0).Select(l => l.Length - l.TrimStart().Length).DefaultIfEmpty(0).Min();
         return string.Join(Environment.NewLine, lines.Select(l => l.Length >= indent ? l.Substring(indent) : l.TrimStart())).Trim('\r', '\n') + Environment.NewLine;
     }
